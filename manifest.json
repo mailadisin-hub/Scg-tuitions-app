@@ -1,0 +1,12 @@
+{
+  "name": "SCG Tuitions Parent Portal",
+  "short_name": "SCG Tuitions",
+  "description": "Parent communication portal for SCG Tuitions Ltd, Swindon",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#0d2137",
+  "theme_color": "#0d2137",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
