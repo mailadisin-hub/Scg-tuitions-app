@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — My Messages</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+</head>
+<body>
+
+  <!-- ── Header ────────────────────────────────────────────────────────────── -->
+  <header class="app-header">
+    <a class="logo" href="#">
+      <div class="logo-icon">SCG</div>
+      <div class="logo-text">
+        <span class="logo-name">SCG Tuitions</span>
+        <span class="logo-tagline">Parent Portal</span>
+      </div>
+    </a>
+    <div class="header-right">
+      <div class="user-badge" id="user-badge">…</div>
+      <button class="btn-logout" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <!-- ── Unread alert banner (shown when there are unread msgs) ─────────────── -->
+  <div id="unread-banner" style="display:none;" class="notif-banner">
+    <div class="notif-banner-text">
+      <div class="pulse-dot"></div>
+      <span id="unread-banner-text">You have unread messages from your child's teacher.</span>
+    </div>
+    <span style="font-size:13px;opacity:0.8;">↓ Read &amp; confirm below</span>
+  </div>
+
+  <!-- ── Notification permission prompt ────────────────────────────────────── -->
+  <div id="notif-prompt" style="display:none;" class="page-wrapper">
+    <div class="notif-prompt">
+      <div class="notif-prompt-text">
+        <span>🔔</span>
+        <div>
+          <strong>Enable notifications for hourly reminders</strong>
+          <small>Get browser alerts every hour until you confirm reading a message.</small>
+        </div>
+      </div>
+      <button class="btn btn-success btn-sm" onclick="enableNotifications()">Enable Now</button>
+    </div>
+  </div>
+
+  <div class="page-wrapper" id="main-content" style="display:none;">
+
+    <!-- Stats row -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-icon red">📬</div>
+        <div class="stat-info">
+          <p>Unread Messages</p>
+          <h3 id="stat-unread">—</h3>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon blue">📩</div>
+        <div class="stat-info">
+          <p>Total Messages</p>
+          <h3 id="stat-total">—</h3>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green">✅</div>
+        <div class="stat-info">
+          <p>Confirmed Read</p>
+          <h3 id="stat-read">—</h3>
+        </div>
+      </div>
+    </div>
+
+    <!-- Message inbox -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📥 Messages from Teachers</span>
+        <span id="inbox-badge"></span>
+      </div>
+      <div id="message-list" class="message-list">
+        <div class="loader"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Message Detail Modal ───────────────────────────────────────────────── -->
+  <div id="message-detail" class="message-detail" onclick="closeModal(event)">
+    <div class="message-modal" id="modal-content">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h2 id="modal-subject">Subject</h2>
+          <p id="modal-meta">From · Date</p>
+        </div>
+        <button class="modal-close" onclick="closeModalBtn()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="message-content-box" id="modal-body">…</div>
+
+        <!-- Confirm read section (shown when unread) -->
+        <div class="read-confirm-section" id="read-confirm-section">
+          <h3>⚠️ Please confirm you have read this message</h3>
+          <p>You will continue to receive hourly reminders until you confirm.</p>
+          <button class="btn btn-success" id="confirm-read-btn" onclick="confirmRead()">
+            ✅ I have read the message
+          </button>
+          <div id="modal-notif-count" class="notif-count-label" style="margin-top:10px;"></div>
+        </div>
+
+        <!-- Already confirmed section -->
+        <div class="read-confirmed-section" id="read-confirmed-section" style="display:none;">
+          <h3>✅ Message confirmed as read</h3>
+          <p id="confirmed-at-text">You confirmed this message was read.</p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/auth.js"></script>
+
+  <script>
+    let currentUser     = null;
+    let openMessageId   = null;
+    let allMessages     = [];
+    let messagesListener = null;
+
+    // ── Boot ────────────────────────────────────────────────────────────────
+    (async () => {
+      try {
+        currentUser = await requireAuth('parent');
+        renderHeaderUser(currentUser);
+        document.getElementById('main-content').style.display = 'block';
+        await checkNotificationPermission();
+        subscribeToMessages();
+        registerServiceWorker();
+      } catch {}
+    })();
+
+    // ── Service Worker registration ─────────────────────────────────────────
+    function registerServiceWorker() {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/firebase-messaging-sw.js')
+          .catch(() => {}); // non-critical
+      }
+    }
+
+    // ── Notification permission check ────────────────────────────────────────
+    async function checkNotificationPermission() {
+      if (!('Notification' in window)) return;
+      if (Notification.permission !== 'granted') {
+        document.getElementById('notif-prompt').style.display = 'block';
+      }
+    }
+
+    async function enableNotifications() {
+      const granted = await requestNotificationPermission();
+      if (granted) {
+        document.getElementById('notif-prompt').style.display = 'none';
+        showToast('Notifications enabled', 'You will receive hourly reminders for unread messages.', '🔔');
+        // Start notifications for already-loaded unread messages
+        const unread = allMessages.filter(m => !m.acknowledged);
+        resumeNotificationsForUnread(unread.map(m => ({
+          id: m.id, fromName: m.fromName, subject: m.subject
+        })));
+      } else {
+        showToast('Permission denied', 'Enable notifications in browser settings for reminders.', '⚠️');
+      }
+    }
+
+    // ── Firestore real-time listener ─────────────────────────────────────────
+    function subscribeToMessages() {
+      if (messagesListener) messagesListener();
+
+      messagesListener = db.collection('messages')
+        .where('toUserId', '==', currentUser.uid)
+        .orderBy('createdAt', 'desc')
+        .onSnapshot(snap => {
+          allMessages = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          renderMessages(allMessages);
+          updateStats(allMessages);
+          handleNotificationsForUnread(allMessages);
+        }, err => console.error('Messages listener error:', err));
+    }
+
+    // ── Render message list ──────────────────────────────────────────────────
+    function renderMessages(messages) {
+      const list = document.getElementById('message-list');
+
+      if (!messages.length) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <h3>No messages yet</h3>
+            <p>Messages from your child's teachers will appear here.</p>
+          </div>`;
+        return;
+      }
+
+      list.innerHTML = messages.map(msg => {
+        const isUnread = !msg.acknowledged;
+        const timeStr  = formatTime(msg.createdAt);
+        const preview  = msg.content.length > 80
+          ? msg.content.slice(0, 80) + '…'
+          : msg.content;
+
+        return `
+          <div class="message-item ${isUnread ? 'unread' : ''}" onclick="openMessage('${msg.id}')">
+            <div class="${isUnread ? 'unread-indicator' : 'read-indicator'}"></div>
+            <div class="message-info">
+              <div class="message-header">
+                <span class="message-from">${escHtml(msg.fromName)}</span>
+                <span class="message-time">${timeStr}</span>
+              </div>
+              <div class="message-subject">${escHtml(msg.subject)}</div>
+              <div class="message-preview">${escHtml(preview)}</div>
+              ${!isUnread ? `<div class="next-notif" style="color:var(--success);font-size:11px;margin-top:4px;">✅ Confirmed read${msg.acknowledgedAt ? ' · ' + formatTime(msg.acknowledgedAt) : ''}</div>` : ''}
+              ${isUnread ? `<div class="notif-count-label" id="notif-count-${msg.id}"></div>` : ''}
+            </div>
+            <div class="message-meta">
+              ${isUnread
+                ? `<span class="badge badge-danger">Unread</span>`
+                : `<span class="badge badge-success">Read</span>`}
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // ── Update stats ─────────────────────────────────────────────────────────
+    function updateStats(messages) {
+      const unread = messages.filter(m => !m.acknowledged).length;
+      const read   = messages.filter(m =>  m.acknowledged).length;
+
+      document.getElementById('stat-unread').textContent = unread;
+      document.getElementById('stat-total').textContent  = messages.length;
+      document.getElementById('stat-read').textContent   = read;
+
+      const banner = document.getElementById('unread-banner');
+      const badge  = document.getElementById('inbox-badge');
+
+      if (unread > 0) {
+        banner.style.display = 'flex';
+        document.getElementById('unread-banner-text').textContent =
+          `You have ${unread} unread message${unread !== 1 ? 's' : ''} from your child's teacher.`;
+        badge.innerHTML = `<span class="badge badge-danger">${unread} unread</span>`;
+      } else {
+        banner.style.display = 'none';
+        badge.innerHTML = `<span class="badge badge-success">All read</span>`;
+      }
+    }
+
+    // ── Handle notifications for unread messages ─────────────────────────────
+    function handleNotificationsForUnread(messages) {
+      const unread = messages.filter(m => !m.acknowledged);
+
+      // Start notifications for new unread messages
+      unread.forEach(msg => {
+        startMessageNotifications(msg.id, msg.fromName, msg.subject);
+      });
+
+      // Stop notifications for messages that are now acknowledged
+      const unreadIds = new Set(unread.map(m => m.id));
+      Object.keys(activeIntervals).forEach(id => {
+        if (!unreadIds.has(id)) stopMessageNotifications(id);
+      });
+    }
+
+    // ── Open message modal ───────────────────────────────────────────────────
+    function openMessage(msgId) {
+      const msg = allMessages.find(m => m.id === msgId);
+      if (!msg) return;
+
+      openMessageId = msgId;
+
+      document.getElementById('modal-subject').textContent = msg.subject;
+      document.getElementById('modal-meta').textContent    =
+        `From ${msg.fromName} · ${formatTime(msg.createdAt)}`;
+      document.getElementById('modal-body').textContent    = msg.content;
+
+      const confirmSection   = document.getElementById('read-confirm-section');
+      const confirmedSection = document.getElementById('read-confirmed-section');
+      const countLabel       = document.getElementById('modal-notif-count');
+
+      if (!msg.acknowledged) {
+        confirmSection.style.display   = 'block';
+        confirmedSection.style.display = 'none';
+
+        // Show how many times notified
+        const state     = getNotifState();
+        const count     = state[msgId]?.count || 0;
+        countLabel.textContent = count > 0
+          ? `You have been notified ${count} time${count !== 1 ? 's' : ''} about this message.`
+          : '';
+      } else {
+        confirmSection.style.display   = 'none';
+        confirmedSection.style.display = 'block';
+        document.getElementById('confirmed-at-text').textContent =
+          `You confirmed this message was read${msg.acknowledgedAt ? ' on ' + msg.acknowledgedAt.toDate().toLocaleString('en-GB') : ''}.`;
+      }
+
+      document.getElementById('message-detail').classList.add('open');
+    }
+
+    function closeModal(e) {
+      if (e.target.id === 'message-detail') closeModalBtn();
+    }
+
+    function closeModalBtn() {
+      document.getElementById('message-detail').classList.remove('open');
+      openMessageId = null;
+    }
+
+    // ── Confirm read ─────────────────────────────────────────────────────────
+    async function confirmRead() {
+      if (!openMessageId) return;
+
+      const btn = document.getElementById('confirm-read-btn');
+      btn.disabled = true;
+      btn.textContent = 'Confirming…';
+
+      try {
+        await db.collection('messages').doc(openMessageId).update({
+          acknowledged:   true,
+          acknowledgedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+
+        stopMessageNotifications(openMessageId);
+        showToast('Message confirmed', 'Thank you! Reminders for this message have stopped.', '✅');
+        closeModalBtn();
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = '✅ I have read the message';
+        showToast('Error', 'Could not confirm. Please try again.', '❌');
+      }
+    }
+
+    // ── Cleanup on page hide ─────────────────────────────────────────────────
+    window.addEventListener('beforeunload', () => {
+      if (messagesListener) messagesListener();
+    });
+
+    // ── Helper ───────────────────────────────────────────────────────────────
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>
