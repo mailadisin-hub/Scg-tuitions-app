@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — Payments</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+</head>
+<body>
+
+  <header class="app-header">
+    <a class="logo" href="#">
+      <div class="logo-icon">SCG</div>
+      <div class="logo-text">
+        <span class="logo-name">SCG Tuitions</span>
+        <span class="logo-tagline">Teacher Portal</span>
+      </div>
+    </a>
+    <div class="header-right">
+      <div class="user-badge" id="user-badge">…</div>
+      <button class="btn-logout" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="page-wrapper-wide" id="main-content" style="display:none;">
+    <div class="dashboard-grid">
+
+      <!-- ── Left: Record Payment ── -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">💳 Record Payment</span>
+          </div>
+          <div class="card-body">
+            <div id="pay-alert" class="alert alert-error" style="display:none;"></div>
+
+            <form id="pay-form" onsubmit="submitPayment(event)">
+              <div class="form-group">
+                <label for="pay-student">Student</label>
+                <select id="pay-student" required>
+                  <option value="">— Select a student —</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="pay-term">Term</label>
+                <input id="pay-term" type="text" placeholder="e.g. Autumn Term 2025-26" required>
+              </div>
+
+              <div class="form-group">
+                <label for="pay-amount">Amount (£)</label>
+                <input id="pay-amount" type="number" min="0" step="0.01" placeholder="Amount in £ (e.g. 250.00)" required>
+              </div>
+
+              <div class="form-group">
+                <label for="pay-due">Due Date</label>
+                <input id="pay-due" type="date" required>
+              </div>
+
+              <div class="form-group">
+                <label for="pay-invoice">Invoice Reference</label>
+                <input id="pay-invoice" type="text" placeholder="Invoice ref e.g. SCG-2025-001" required>
+              </div>
+
+              <div class="form-group">
+                <label for="pay-stripe">Stripe Payment Link (optional)</label>
+                <input id="pay-stripe" type="url" placeholder="Stripe Payment Link URL (optional)">
+              </div>
+
+              <div class="form-group">
+                <label for="pay-sumup">SumUp Payment Link (optional)</label>
+                <input id="pay-sumup" type="url" placeholder="SumUp Payment Link URL (optional)">
+              </div>
+
+              <div class="form-group">
+                <label for="pay-notes">Notes (optional)</label>
+                <textarea id="pay-notes" placeholder="Optional notes"></textarea>
+              </div>
+
+              <button class="btn btn-primary btn-full" type="submit" id="pay-btn">
+                💳 Create Payment Record
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Right: Payment Records ── -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📋 Payment Records</span>
+          </div>
+          <div class="card-body" style="padding-bottom:8px;">
+            <div class="form-group" style="margin-bottom:12px;">
+              <label for="pay-filter">Filter by student</label>
+              <select id="pay-filter" onchange="filterPayments()">
+                <option value="">All students</option>
+              </select>
+            </div>
+
+            <!-- Stats row -->
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+              <div style="flex:1;min-width:100px;background:var(--bg-page,#f0f4ff);border-radius:8px;padding:10px 12px;">
+                <p style="font-size:11px;color:var(--text-muted);margin:0;">Total Sent</p>
+                <h4 id="stat-sent" style="margin:2px 0 0;font-size:18px;">—</h4>
+              </div>
+              <div style="flex:1;min-width:100px;background:var(--bg-page,#f0f4ff);border-radius:8px;padding:10px 12px;">
+                <p style="font-size:11px;color:var(--text-muted);margin:0;">Total Paid</p>
+                <h4 id="stat-paid" style="margin:2px 0 0;font-size:18px;color:#16a34a;">—</h4>
+              </div>
+              <div style="flex:1;min-width:100px;background:var(--bg-page,#f0f4ff);border-radius:8px;padding:10px 12px;">
+                <p style="font-size:11px;color:var(--text-muted);margin:0;">Outstanding</p>
+                <h4 id="stat-outstanding" style="margin:2px 0 0;font-size:18px;color:#dc2626;">—</h4>
+              </div>
+            </div>
+          </div>
+
+          <div id="pay-list" style="padding:0 16px 16px;">
+            <div style="text-align:center;padding:40px;">
+              <div class="spinner" style="margin:0 auto;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Invoice Modal -->
+  <div id="invoice-modal" class="message-detail" onclick="closeInvoiceIfBg(event)">
+    <div class="message-modal" style="max-width:600px;">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h2>Invoice</h2>
+          <p id="inv-ref">—</p>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-blue btn-sm no-print" onclick="window.print()">🖨️ Print / Save PDF</button>
+          <button class="modal-close no-print" onclick="document.getElementById('invoice-modal').classList.remove('open')">✕</button>
+        </div>
+      </div>
+      <div class="modal-body" id="invoice-print-area">
+        <div id="printable-invoice">
+          <!-- populated by renderInvoice() -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/nav.js"></script>
+
+  <script>
+    let currentUser   = null;
+    let parentsList   = [];
+    let allPayments   = [];
+    let payListener   = null;
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    (async () => {
+      try {
+        currentUser = await requireAuth('teacher');
+        renderHeaderUser(currentUser);
+        renderPortalNav('payments', 'teacher');
+        document.getElementById('main-content').style.display = 'block';
+
+        parentsList = await loadParentsList();
+        populateParentSelect('pay-student', parentsList);
+        populateFilterSelect();
+        suggestInvoiceRef();
+        subscribePayments();
+      } catch {}
+    })();
+
+    // ── Suggest invoice ref ───────────────────────────────────────────────────
+    function suggestInvoiceRef() {
+      document.getElementById('pay-invoice').value =
+        'SCG-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-3);
+    }
+
+    // ── Populate filter select ────────────────────────────────────────────────
+    function populateFilterSelect() {
+      const sel = document.getElementById('pay-filter');
+      sel.innerHTML = '<option value="">All students</option>';
+      parentsList.forEach(p => {
+        const label = p.childName ? `${p.displayName} — ${p.childName}` : p.displayName;
+        sel.innerHTML += `<option value="${p.uid}">${escHtml(label)}</option>`;
+      });
+    }
+
+    // ── Submit payment ────────────────────────────────────────────────────────
+    async function submitPayment(e) {
+      e.preventDefault();
+      clearAlert('pay-alert');
+
+      const studentId = document.getElementById('pay-student').value;
+      const termName  = document.getElementById('pay-term').value.trim();
+      const amountRaw = parseFloat(document.getElementById('pay-amount').value);
+      const dueDate   = document.getElementById('pay-due').value;
+      const invoiceNumber = document.getElementById('pay-invoice').value.trim();
+      const stripePaymentLink = document.getElementById('pay-stripe').value.trim();
+      const sumupPaymentLink  = document.getElementById('pay-sumup').value.trim();
+      const notes = document.getElementById('pay-notes').value.trim();
+
+      if (!studentId) { setAlert('pay-alert', 'error', 'Please select a student.'); return; }
+
+      const parent = parentsList.find(p => p.uid === studentId);
+      const studentName = parent ? (parent.childName || parent.displayName) : studentId;
+      const parentName  = parent ? parent.displayName : studentId;
+
+      const btn = document.getElementById('pay-btn');
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+
+      try {
+        await db.collection('payments').add({
+          teacherId:          currentUser.uid,
+          studentId,
+          studentName,
+          parentId:           studentId,
+          parentName,
+          termName,
+          amountDue:          Math.round(amountRaw * 100),
+          dueDate:            firebase.firestore.Timestamp.fromDate(new Date(dueDate + 'T00:00:00')),
+          paid:               false,
+          paidAt:             null,
+          paymentMethod:      null,
+          stripePaymentLink:  stripePaymentLink || null,
+          sumupPaymentLink:   sumupPaymentLink  || null,
+          invoiceNumber,
+          notes:              notes || null,
+          createdAt:          firebase.firestore.FieldValue.serverTimestamp(),
+        });
+
+        document.getElementById('pay-form').reset();
+        suggestInvoiceRef();
+        showToast('Payment recorded', `Payment record created for ${studentName}.`, '💳');
+      } catch (err) {
+        setAlert('pay-alert', 'error', 'Failed to save payment. Please try again.');
+        console.error(err);
+      }
+
+      btn.disabled = false;
+      btn.textContent = '💳 Create Payment Record';
+    }
+
+    // ── Subscribe to payments ─────────────────────────────────────────────────
+    function subscribePayments() {
+      if (payListener) payListener();
+
+      payListener = db.collection('payments')
+        .where('teacherId', '==', currentUser.uid)
+        .orderBy('createdAt', 'desc')
+        .onSnapshot(snap => {
+          allPayments = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          filterPayments();
+        }, err => console.error('Payments listener error:', err));
+    }
+
+    // ── Filter payments ───────────────────────────────────────────────────────
+    function filterPayments() {
+      const selectedId = document.getElementById('pay-filter').value;
+      const filtered = selectedId
+        ? allPayments.filter(r => r.studentId === selectedId)
+        : allPayments;
+      renderPayments(filtered);
+    }
+
+    // ── Render payments ───────────────────────────────────────────────────────
+    function renderPayments(records) {
+      const list = document.getElementById('pay-list');
+
+      // Update stats
+      const totalSentPence  = records.reduce((s, r) => s + (r.amountDue || 0), 0);
+      const totalPaidPence  = records.filter(r => r.paid).reduce((s, r) => s + (r.amountDue || 0), 0);
+      const totalOutPence   = records.filter(r => !r.paid).reduce((s, r) => s + (r.amountDue || 0), 0);
+      document.getElementById('stat-sent').textContent        = '£' + (totalSentPence / 100).toFixed(2);
+      document.getElementById('stat-paid').textContent        = '£' + (totalPaidPence / 100).toFixed(2);
+      document.getElementById('stat-outstanding').textContent = '£' + (totalOutPence  / 100).toFixed(2);
+
+      if (!records.length) {
+        list.innerHTML = `
+          <div class="empty-state" style="padding:40px 24px;">
+            <div class="empty-icon">💳</div>
+            <h3>No payment records yet</h3>
+            <p>Use the form on the left to create your first payment record.</p>
+          </div>`;
+        return;
+      }
+
+      const now = new Date();
+      list.innerHTML = records.map(r => {
+        const amount = '£' + ((r.amountDue || 0) / 100).toFixed(2);
+        const dueDate = r.dueDate ? r.dueDate.toDate() : null;
+        const isOverdue = !r.paid && dueDate && dueDate < now;
+        let badge = '';
+        if (r.paid)         badge = '<span class="badge badge-success">Paid</span>';
+        else if (isOverdue) badge = '<span class="badge badge-danger">Overdue</span>';
+        else                badge = '<span class="badge badge-warning">Pending</span>';
+
+        const markPaidBtn = !r.paid ? `
+          <div class="mark-paid-wrap" id="mpw-${r.id}" style="display:none;margin-top:8px;">
+            <select id="method-${r.id}" style="margin-bottom:6px;font-size:13px;padding:4px 8px;border-radius:6px;border:1px solid #dbeafe;">
+              <option value="bank_transfer">Bank Transfer</option>
+              <option value="stripe">Stripe</option>
+              <option value="sumup">SumUp</option>
+              <option value="cash">Cash</option>
+            </select>
+            <button class="btn btn-success btn-sm" onclick="confirmMarkPaid('${r.id}')">Confirm Paid</button>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('mpw-${r.id}').style.display='none'">Cancel</button>
+          </div>
+          <button class="btn btn-success btn-sm no-print" onclick="document.getElementById('mpw-${r.id}').style.display='block';this.style.display='none'">Mark as Paid</button>` : '';
+
+        return `
+          <div class="sent-message-item" style="padding:12px;border-radius:10px;border:1px solid #dbeafe;margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;">
+              <div>
+                <strong>${escHtml(r.studentName || '—')}</strong>
+                <span style="color:var(--text-muted);font-size:13px;margin-left:6px;">${escHtml(r.termName || '—')}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <strong style="font-size:15px;">${amount}</strong>
+                ${badge}
+              </div>
+            </div>
+            <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">
+              Due: ${dueDate ? formatDate(r.dueDate) : '—'}
+              &nbsp;·&nbsp; Ref: ${escHtml(r.invoiceNumber || '—')}
+            </div>
+            <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+              ${markPaidBtn}
+              <button class="btn btn-secondary btn-sm" onclick="openInvoice('${r.id}')">View Invoice</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // ── Mark paid ─────────────────────────────────────────────────────────────
+    async function confirmMarkPaid(id) {
+      const method = document.getElementById('method-' + id).value;
+      try {
+        await db.collection('payments').doc(id).update({
+          paid:          true,
+          paidAt:        firebase.firestore.FieldValue.serverTimestamp(),
+          paymentMethod: method,
+        });
+        showToast('Payment updated', 'Payment marked as paid.', '✅');
+      } catch (err) {
+        showToast('Error', 'Could not update payment. Please try again.', '❌');
+        console.error(err);
+      }
+    }
+
+    // ── Open invoice modal ────────────────────────────────────────────────────
+    async function openInvoice(id) {
+      const snap = await db.collection('payments').doc(id).get();
+      if (!snap.exists) { showToast('Error', 'Payment record not found.', '❌'); return; }
+      const payment = { id: snap.id, ...snap.data() };
+      window.currentInvoiceData = payment;
+      renderInvoice(payment);
+      document.getElementById('invoice-modal').classList.add('open');
+    }
+
+    function closeInvoiceIfBg(e) {
+      if (e.target.id === 'invoice-modal') document.getElementById('invoice-modal').classList.remove('open');
+    }
+
+    // ── Render invoice ────────────────────────────────────────────────────────
+    function renderInvoice(p) {
+      document.getElementById('inv-ref').textContent = p.invoiceNumber || '—';
+      const amount = ((p.amountDue || 0) / 100).toFixed(2);
+      const statusText = p.paid
+        ? '✅ PAID on ' + formatDate(p.paidAt)
+        : '⏳ OUTSTANDING';
+
+      document.getElementById('printable-invoice').innerHTML = `
+        <div class="invoice-print-header" style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+          <div class="invoice-logo" style="width:52px;height:52px;background:#16a34a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;border-radius:10px;letter-spacing:-1px;flex-shrink:0;">SCG</div>
+          <div class="invoice-company">
+            <h1 style="font-size:20px;color:#1e3a8a;font-weight:800;margin:0;">SCG Tuitions</h1>
+            <p style="font-size:13px;color:#64748b;margin:2px 0 0;">Personalised Learning for Every Child<br>Swindon, UK · info@scgtuitions.co.uk</p>
+          </div>
+        </div>
+        <hr style="border:1px solid #dbeafe;margin:16px 0;">
+        <table class="invoice-table" style="width:100%;border-collapse:collapse;">
+          <tr><td style="padding:8px 0;color:#64748b;width:160px;font-size:14px;">Invoice Ref:</td><td style="padding:8px 0;font-size:14px;"><strong>${escHtml(p.invoiceNumber || '—')}</strong></td></tr>
+          <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Date Issued:</td><td style="padding:8px 0;font-size:14px;">${formatDate(p.createdAt)}</td></tr>
+          <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Student:</td><td style="padding:8px 0;font-size:14px;">${escHtml(p.studentName || '—')}</td></tr>
+          <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Parent/Guardian:</td><td style="padding:8px 0;font-size:14px;">${escHtml(p.parentName || '—')}</td></tr>
+          <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Term:</td><td style="padding:8px 0;font-size:14px;">${escHtml(p.termName || '—')}</td></tr>
+          <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Amount Due:</td><td style="padding:8px 0;font-size:14px;"><strong>£${amount}</strong></td></tr>
+          <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Due Date:</td><td style="padding:8px 0;font-size:14px;">${formatDate(p.dueDate)}</td></tr>
+          <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Status:</td><td style="padding:8px 0;font-size:14px;">${statusText}</td></tr>
+        </table>
+        <div class="invoice-footer" style="margin-top:32px;padding-top:12px;border-top:1px solid #dbeafe;font-size:12px;color:#94a3b8;">
+          <p>SCG Tuitions Ltd · Swindon, UK · info@scgtuitions.co.uk · 07568 409082</p>
+          <p style="margin-top:4px;">Thank you for your continued support.</p>
+        </div>`;
+    }
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    window.addEventListener('beforeunload', () => {
+      if (payListener) payListener();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — Assessment Reports</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+</head>
+<body>
+
+  <header class="app-header">
+    <a class="logo" href="#">
+      <div class="logo-icon">SCG</div>
+      <div class="logo-text">
+        <span class="logo-name">SCG Tuitions</span>
+        <span class="logo-tagline">Parent Portal</span>
+      </div>
+    </a>
+    <div class="header-right">
+      <div class="user-badge" id="user-badge">…</div>
+      <button class="btn-logout" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="page-wrapper" id="main-content" style="display:none;">
+
+    <!-- Stats row -->
+    <div class="stats-row" style="margin-bottom:24px;">
+      <div class="stat-card">
+        <div class="stat-icon blue">📊</div>
+        <div class="stat-info">
+          <p>Average Score %</p>
+          <h3 id="stat-avg">—</h3>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green">🏆</div>
+        <div class="stat-info">
+          <p>Best Score</p>
+          <h3 id="stat-best">—</h3>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon orange">📋</div>
+        <div class="stat-info">
+          <p>Total Assessments</p>
+          <h3 id="stat-count">—</h3>
+        </div>
+      </div>
+    </div>
+
+    <!-- Assessment list -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📊 Assessment Results</span>
+      </div>
+      <div id="reports-list" style="padding:8px 16px 16px;">
+        <div style="text-align:center;padding:40px;">
+          <div class="spinner" style="margin:0 auto;"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/nav.js"></script>
+
+  <script>
+    let currentUser    = null;
+    let reportListener = null;
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    (async () => {
+      try {
+        currentUser = await requireAuth('parent');
+        renderHeaderUser(currentUser);
+        renderPortalNav('reports', 'parent');
+        document.getElementById('main-content').style.display = 'block';
+        loadReports();
+      } catch {}
+    })();
+
+    // ── Load reports ──────────────────────────────────────────────────────────
+    function loadReports() {
+      if (reportListener) reportListener();
+
+      reportListener = db.collection('assessments')
+        .where('studentId', '==', currentUser.uid)
+        .orderBy('date', 'desc')
+        .onSnapshot(snap => {
+          const records = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          updateStats(records);
+          renderReports(records);
+        }, err => console.error('Reports listener error:', err));
+    }
+
+    // ── Update stats ──────────────────────────────────────────────────────────
+    function updateStats(records) {
+      const withPct = records.filter(r => r.percentage !== null && r.percentage !== undefined);
+      const count = records.length;
+
+      if (withPct.length > 0) {
+        const avg  = Math.round(withPct.reduce((s, r) => s + r.percentage, 0) / withPct.length);
+        const best = withPct.reduce((best, r) => r.percentage > best.percentage ? r : best, withPct[0]);
+        document.getElementById('stat-avg').textContent  = avg + '%';
+        document.getElementById('stat-best').textContent =
+          best.score !== null ? `${best.score}/${best.maxScore} (${best.percentage}%)` : best.percentage + '%';
+      } else {
+        document.getElementById('stat-avg').textContent  = '—';
+        document.getElementById('stat-best').textContent = '—';
+      }
+
+      document.getElementById('stat-count').textContent = count;
+    }
+
+    // ── Render reports ────────────────────────────────────────────────────────
+    function renderReports(records) {
+      const list = document.getElementById('reports-list');
+
+      if (!records.length) {
+        list.innerHTML = `
+          <div class="empty-state" style="padding:40px 24px;">
+            <div class="empty-icon">📊</div>
+            <h3>No assessment results yet</h3>
+            <p>Your assessment results will appear here once your teacher uploads them.</p>
+          </div>`;
+        return;
+      }
+
+      list.innerHTML = records.map(r => {
+        const pct = r.percentage;
+        let badgeClass = 'badge-warning';
+        let barColor = '#f59e0b';
+        if (pct !== null && pct !== undefined) {
+          if (pct >= 70)     { badgeClass = 'badge-success'; barColor = '#16a34a'; }
+          else if (pct < 50) { badgeClass = 'badge-danger';  barColor = '#dc2626'; }
+        }
+
+        const scoreDisplay = (r.score !== null && r.score !== undefined)
+          ? `${r.score} / ${r.maxScore}`
+          : '—';
+
+        const progressBar = pct !== null ? `
+          <div style="background:#e2e8f0;border-radius:4px;height:6px;margin-top:8px;overflow:hidden;">
+            <div style="background:${barColor};height:6px;border-radius:4px;width:${Math.min(pct, 100)}%;transition:width 0.4s ease;"></div>
+          </div>` : '';
+
+        const downloadBtn = r.fileUrl ? `
+          <a class="btn btn-secondary btn-sm" href="${escHtml(r.fileUrl)}" target="_blank" rel="noopener">📄 Download Paper</a>` : '';
+
+        return `
+          <div class="message-item" style="padding:14px;border-radius:10px;border:1px solid #dbeafe;margin-bottom:10px;background:#fff;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;">
+              <div>
+                <strong style="font-size:15px;">${escHtml(r.name || '—')}</strong>
+                <div style="font-size:13px;color:var(--text-muted);margin-top:2px;">${r.date ? formatDate(r.date) : '—'}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;text-align:right;">
+                <span style="font-size:16px;font-weight:700;">${escHtml(scoreDisplay)}</span>
+                ${pct !== null ? `<span class="badge ${badgeClass}">${pct}%</span>` : ''}
+              </div>
+            </div>
+            ${progressBar}
+            ${r.notes ? `<p style="font-size:13px;color:var(--text-muted);margin-top:8px;">${escHtml(r.notes)}</p>` : ''}
+            ${downloadBtn ? `<div style="margin-top:8px;">${downloadBtn}</div>` : ''}
+          </div>`;
+      }).join('');
+    }
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    window.addEventListener('beforeunload', () => {
+      if (reportListener) reportListener();
+    });
+  </script>
+</body>
+</html>

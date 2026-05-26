@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — Messages</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+</head>
+<body>
+
+<header class="app-header">
+  <a class="logo" href="#">
+    <div class="logo-icon">SCG</div>
+    <div class="logo-text">
+      <span class="logo-name">SCG Tuitions</span>
+      <span class="logo-tagline">Teacher Portal</span>
+    </div>
+  </a>
+  <div class="header-right">
+    <div class="user-badge" id="user-badge">…</div>
+    <button class="btn-logout" onclick="signOut()">Sign Out</button>
+  </div>
+</header>
+
+<div id="main-content" style="display:none;">
+  <div class="chat-layout" id="chat-layout">
+
+    <!-- ── Sidebar ── -->
+    <aside class="chat-sidebar">
+      <div class="chat-sidebar-header">
+        <span class="chat-sidebar-title">💬 Conversations</span>
+        <button class="btn btn-success btn-sm" onclick="showNewConvoModal()">+ New</button>
+      </div>
+      <div id="convo-list">
+        <div class="loader"><div class="spinner"></div></div>
+      </div>
+    </aside>
+
+    <!-- ── Chat window ── -->
+    <div class="chat-window" id="chat-window">
+      <div class="chat-empty" id="chat-empty">
+        <div class="empty-icon">💬</div>
+        <h3>Teacher Messaging</h3>
+        <p>Select a conversation or click <strong>+ New</strong> to message a parent.</p>
+      </div>
+
+      <div id="active-chat" style="display:none; flex-direction:column; height:100%;">
+        <div class="chat-window-header">
+          <button class="btn-logout chat-back-btn" onclick="closeChat()" style="margin-right:4px;">← Back</button>
+          <div class="chat-partner-avatar" id="partner-avatar">?</div>
+          <div class="chat-partner-info">
+            <h3 id="partner-name">Parent</h3>
+            <p id="partner-sub">Parent</p>
+          </div>
+        </div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-bar">
+          <textarea class="chat-input" id="reply-input" placeholder="Type a message…" rows="1"
+            onkeydown="handleInputKey(event)"></textarea>
+          <button class="chat-send-btn" onclick="sendMessage()" title="Send">&#9658;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New conversation modal -->
+<div id="new-convo-modal" class="message-detail" onclick="closeNewConvoModal(event)">
+  <div class="message-modal" style="max-width:480px;">
+    <div class="modal-header">
+      <div class="modal-title-group"><h2>New Conversation</h2><p>Start a message thread with a parent</p></div>
+      <button class="modal-close" onclick="document.getElementById('new-convo-modal').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="new-convo-alert" class="alert alert-error" style="display:none;"></div>
+      <div class="form-group">
+        <label>Select parent</label>
+        <select id="new-convo-parent">
+          <option value="">— Loading parents… —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>First message</label>
+        <textarea id="new-convo-msg" placeholder="Write your message…" style="min-height:100px;"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="createConversation()">Start Conversation</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/notifications.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/nav.js"></script>
+
+<script>
+  let currentUser    = null;
+  let activeConvoId  = null;
+  let msgsListener   = null;
+  let convosListener = null;
+  let allConvos      = [];
+  let parentsList    = [];
+
+  (async () => {
+    try {
+      currentUser = await requireAuth('teacher');
+      renderHeaderUser(currentUser);
+      renderPortalNav('messages', 'teacher');
+      document.getElementById('main-content').style.display = 'block';
+      subscribeToConversations();
+    } catch {}
+  })();
+
+  function subscribeToConversations() {
+    if (convosListener) convosListener();
+    convosListener = db.collection('conversations')
+      .where('teacherId', '==', currentUser.uid)
+      .orderBy('lastMessageAt', 'desc')
+      .onSnapshot(snap => {
+        allConvos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderConvoList(allConvos);
+      }, err => console.error(err));
+  }
+
+  function renderConvoList(convos) {
+    const list = document.getElementById('convo-list');
+    if (!convos.length) {
+      list.innerHTML = `<div class="empty-state" style="padding:40px 20px;">
+        <div class="empty-icon">📭</div>
+        <h3 style="font-size:15px;">No conversations yet</h3>
+        <p>Click <strong>+ New</strong> to message a parent.</p>
+      </div>`;
+      return;
+    }
+
+    list.innerHTML = convos.map(c => {
+      const unread   = c.teacherUnread || 0;
+      const initials = getInitials(c.parentName);
+      const timeStr  = c.lastMessageAt ? formatTime(c.lastMessageAt) : '';
+      const preview  = c.lastMessage ? escHtml(c.lastMessage.slice(0, 60)) : 'No messages yet';
+      const isActive = c.id === activeConvoId;
+      return `
+        <div class="convo-item${unread > 0 ? ' has-unread' : ''}${isActive ? ' active' : ''}"
+             onclick="openConvo('${c.id}')">
+          <div class="convo-avatar">${initials}</div>
+          <div class="convo-info">
+            <div class="convo-name">${escHtml(c.parentName)}</div>
+            <div class="convo-preview">${preview}</div>
+          </div>
+          <div class="convo-meta">
+            <span class="convo-time">${timeStr}</span>
+            ${unread > 0 ? `<span class="badge badge-danger">${unread}</span>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function openConvo(convoId) {
+    activeConvoId = convoId;
+    const convo = allConvos.find(c => c.id === convoId);
+    if (!convo) return;
+
+    document.getElementById('partner-avatar').textContent = getInitials(convo.parentName);
+    document.getElementById('partner-name').textContent   = convo.parentName;
+    document.getElementById('partner-sub').textContent    = convo.childName
+      ? `Parent of ${convo.childName}` : 'Parent';
+
+    document.getElementById('chat-empty').style.display = 'none';
+    const activeEl = document.getElementById('active-chat');
+    activeEl.style.display = 'flex';
+    document.getElementById('chat-layout').classList.add('chat-open');
+    renderConvoList(allConvos);
+
+    if (msgsListener) msgsListener();
+    document.getElementById('chat-messages').innerHTML = '<div class="loader"><div class="spinner"></div></div>';
+
+    msgsListener = db.collection('conversations').doc(convoId)
+      .collection('messages').orderBy('sentAt', 'asc')
+      .onSnapshot(snap => {
+        const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderMessages(msgs);
+        if (convo.teacherUnread > 0) {
+          db.collection('conversations').doc(convoId).update({ teacherUnread: 0 });
+        }
+      });
+  }
+
+  function closeChat() {
+    document.getElementById('chat-layout').classList.remove('chat-open');
+    activeConvoId = null;
+    if (msgsListener) { msgsListener(); msgsListener = null; }
+    document.getElementById('active-chat').style.display = 'none';
+    document.getElementById('chat-empty').style.display  = '';
+    renderConvoList(allConvos);
+  }
+
+  function renderMessages(msgs) {
+    const container = document.getElementById('chat-messages');
+    if (!msgs.length) {
+      container.innerHTML = `<div class="chat-empty" style="flex:1;"><div class="empty-icon">💬</div><p>Send your first message below.</p></div>`;
+      return;
+    }
+
+    let html = '';
+    let lastDate = '';
+
+    msgs.forEach(msg => {
+      const isMine = msg.senderId === currentUser.uid;
+      const d = msg.sentAt ? msg.sentAt.toDate() : new Date();
+      const dateStr = d.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long' });
+      const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      const initials = getInitials(msg.senderName);
+
+      if (dateStr !== lastDate) {
+        html += `<div class="msg-day-divider"><span>${dateStr}</span></div>`;
+        lastDate = dateStr;
+      }
+
+      html += `
+        <div class="msg-bubble-wrap ${isMine ? 'mine' : 'theirs'}">
+          ${!isMine ? `<div class="msg-avatar-sm">${initials}</div>` : ''}
+          <div class="msg-bubble-col">
+            <div class="msg-bubble ${isMine ? 'mine' : 'theirs'}">${escHtml(msg.content)}</div>
+            <div class="msg-time">${timeStr}</div>
+          </div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+    container.scrollTop = container.scrollHeight;
+  }
+
+  async function sendMessage() {
+    if (!activeConvoId) return;
+    const input   = document.getElementById('reply-input');
+    const content = input.value.trim();
+    if (!content) return;
+    input.value = '';
+    input.style.height = '';
+
+    const now = firebase.firestore.FieldValue.serverTimestamp();
+    try {
+      await db.collection('conversations').doc(activeConvoId)
+        .collection('messages').add({
+          senderId:   currentUser.uid,
+          senderName: currentUser.displayName,
+          senderRole: 'teacher',
+          content, sentAt: now, readAt: null,
+        });
+      await db.collection('conversations').doc(activeConvoId).update({
+        lastMessage:   content,
+        lastMessageAt: now,
+        lastSenderId:  currentUser.uid,
+        parentUnread:  firebase.firestore.FieldValue.increment(1),
+      });
+    } catch { showToast('Error', 'Could not send. Please try again.', '❌'); }
+  }
+
+  function handleInputKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }
+
+  // ── New conversation modal ─────────────────────────────────────────────────
+  async function showNewConvoModal() {
+    document.getElementById('new-convo-modal').classList.add('open');
+    if (!parentsList.length) {
+      parentsList = await loadParentsList();
+      populateParentSelect('new-convo-parent', parentsList);
+    }
+  }
+
+  function closeNewConvoModal(e) {
+    if (e.target.id === 'new-convo-modal') document.getElementById('new-convo-modal').classList.remove('open');
+  }
+
+  async function createConversation() {
+    const parentId = document.getElementById('new-convo-parent').value;
+    const content  = document.getElementById('new-convo-msg').value.trim();
+    clearAlert('new-convo-alert');
+
+    if (!parentId) { setAlert('new-convo-alert', 'error', 'Please select a parent.'); return; }
+    if (!content)  { setAlert('new-convo-alert', 'error', 'Please write a message.'); return; }
+
+    const parent = parentsList.find(p => p.uid === parentId);
+    if (!parent) return;
+
+    // Check if conversation already exists
+    const existing = allConvos.find(c => c.parentId === parentId);
+    if (existing) {
+      document.getElementById('new-convo-modal').classList.remove('open');
+      openConvo(existing.id);
+      // Just send the message into existing convo
+      document.getElementById('reply-input').value = content;
+      sendMessage();
+      return;
+    }
+
+    try {
+      const now = firebase.firestore.FieldValue.serverTimestamp();
+      const convoRef = await db.collection('conversations').add({
+        teacherId:   currentUser.uid,
+        teacherName: currentUser.displayName,
+        parentId:    parent.uid,
+        parentName:  parent.displayName,
+        childName:   parent.childName || '',
+        lastMessage: content,
+        lastMessageAt: now,
+        lastSenderId: currentUser.uid,
+        parentUnread:  1,
+        teacherUnread: 0,
+        createdAt: now,
+      });
+
+      await convoRef.collection('messages').add({
+        senderId:   currentUser.uid,
+        senderName: currentUser.displayName,
+        senderRole: 'teacher',
+        content, sentAt: now, readAt: null,
+      });
+
+      document.getElementById('new-convo-modal').classList.remove('open');
+      document.getElementById('new-convo-msg').value = '';
+      showToast('Message sent!', `Conversation started with ${parent.displayName}.`, '✅');
+    } catch (err) {
+      setAlert('new-convo-alert', 'error', 'Failed to start conversation. Please try again.');
+    }
+  }
+
+  window.addEventListener('beforeunload', () => {
+    if (convosListener) convosListener();
+    if (msgsListener)   msgsListener();
+  });
+</script>
+</body>
+</html>

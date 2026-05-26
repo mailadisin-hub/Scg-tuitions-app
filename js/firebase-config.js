@@ -17,8 +17,9 @@ const VAPID_KEY = "YOUR_VAPID_PUBLIC_KEY";
 
 firebase.initializeApp(firebaseConfig);
 
-const auth = firebase.auth();
-const db   = firebase.firestore();
+const auth    = firebase.auth();
+const db      = firebase.firestore();
+const storage = firebase.storage();
 
 let messaging = null;
 try {

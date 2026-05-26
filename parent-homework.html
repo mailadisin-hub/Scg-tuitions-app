@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — Homework</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+</head>
+<body>
+
+  <header class="app-header">
+    <a class="logo" href="#">
+      <div class="logo-icon">SCG</div>
+      <div class="logo-text">
+        <span class="logo-name">SCG Tuitions</span>
+        <span class="logo-tagline">Parent Portal</span>
+      </div>
+    </a>
+    <div class="header-right">
+      <div class="user-badge" id="user-badge">…</div>
+      <button class="btn-logout" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="page-wrapper" id="main-content" style="display:none;">
+
+    <!-- Stats row -->
+    <div class="stats-row" style="margin-bottom:24px;">
+      <div class="stat-card">
+        <div class="stat-icon green">📦</div>
+        <div class="stat-info">
+          <p>Homework Brought %</p>
+          <h3 id="stat-brought">—</h3>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon blue">✅</div>
+        <div class="stat-info">
+          <p>Marked %</p>
+          <h3 id="stat-marked">—</h3>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon orange">📅</div>
+        <div class="stat-info">
+          <p>Total Sessions</p>
+          <h3 id="stat-total">—</h3>
+        </div>
+      </div>
+    </div>
+
+    <!-- Homework records table -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📚 Homework Records</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="hw-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Session</th>
+              <th>Brought?</th>
+              <th>Marked?</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="hw-body">
+            <tr>
+              <td colspan="5" style="text-align:center;padding:40px;">
+                <div class="spinner" style="margin:0 auto;"></div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/nav.js"></script>
+
+  <script>
+    let currentUser = null;
+    let hwListener  = null;
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    (async () => {
+      try {
+        currentUser = await requireAuth('parent');
+        renderHeaderUser(currentUser);
+        renderPortalNav('homework', 'parent');
+        document.getElementById('main-content').style.display = 'block';
+        loadHomework();
+      } catch {}
+    })();
+
+    // ── Load homework ─────────────────────────────────────────────────────────
+    function loadHomework() {
+      if (hwListener) hwListener();
+
+      hwListener = db.collection('homework')
+        .where('studentId', '==', currentUser.uid)
+        .orderBy('sessionDate', 'desc')
+        .onSnapshot(snap => {
+          const records = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          updateStats(records);
+          renderTable(records);
+        }, err => console.error('Homework listener error:', err));
+    }
+
+    // ── Update stats ──────────────────────────────────────────────────────────
+    function updateStats(records) {
+      const total = records.length;
+      const broughtCount = records.filter(r => r.brought).length;
+      const markedCount  = records.filter(r => r.marked).length;
+
+      const broughtPct = total > 0 ? Math.round((broughtCount / total) * 100) : 0;
+      const markedPct  = total > 0 ? Math.round((markedCount  / total) * 100) : 0;
+
+      document.getElementById('stat-brought').textContent = total > 0 ? broughtPct + '%' : '—';
+      document.getElementById('stat-marked').textContent  = total > 0 ? markedPct  + '%' : '—';
+      document.getElementById('stat-total').textContent   = total;
+    }
+
+    // ── Render table ──────────────────────────────────────────────────────────
+    function renderTable(records) {
+      const tbody = document.getElementById('hw-body');
+
+      if (!records.length) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5">
+              <div class="empty-state" style="padding:40px 24px;">
+                <div class="empty-icon">📚</div>
+                <h3>No homework records yet</h3>
+                <p>Your homework history will appear here once your teacher adds records.</p>
+              </div>
+            </td>
+          </tr>`;
+        return;
+      }
+
+      tbody.innerHTML = records.map(r => `
+        <tr>
+          <td>${formatDate(r.sessionDate)}</td>
+          <td>${escHtml(r.sessionLabel || '—')}</td>
+          <td>${r.brought ? '<span class="tick">✅</span>' : '<span class="cross">❌</span>'}</td>
+          <td>${r.marked  ? '<span class="tick">✅</span>' : '<span class="cross">❌</span>'}</td>
+          <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            ${r.notes ? escHtml(r.notes) : '<span style="color:var(--text-light);">—</span>'}
+          </td>
+        </tr>`).join('');
+    }
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    window.addEventListener('beforeunload', () => {
+      if (hwListener) hwListener();
+    });
+  </script>
+</body>
+</html>

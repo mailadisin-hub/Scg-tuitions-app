@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — Re-registration</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+</head>
+<body>
+
+  <header class="app-header">
+    <a class="logo" href="#">
+      <div class="logo-icon">SCG</div>
+      <div class="logo-text">
+        <span class="logo-name">SCG Tuitions</span>
+        <span class="logo-tagline">Teacher Portal</span>
+      </div>
+    </a>
+    <div class="header-right">
+      <div class="user-badge" id="user-badge">…</div>
+      <button class="btn-logout" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="page-wrapper-wide" id="main-content" style="display:none;">
+
+    <!-- SECTION 1: Settings -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header">
+        <span class="card-title">⚙️ Re-registration Window</span>
+      </div>
+      <div class="card-body">
+        <div id="window-status" class="alert alert-error" style="display:none;"></div>
+
+        <div class="form-row" style="margin-bottom:16px;">
+          <div class="form-group">
+            <label for="rereg-year">Academic Year (registering FOR)</label>
+            <input id="rereg-year" type="text" placeholder="e.g. 2026-2027">
+          </div>
+          <div class="form-group">
+            <label for="rereg-deadline">Decision Deadline (optional)</label>
+            <input id="rereg-deadline" type="date">
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <button class="btn btn-success" onclick="openWindow()">✅ Open Registration Window</button>
+          <button class="btn btn-danger" onclick="closeWindow()">🔒 Close Window</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 2: Stats -->
+    <div class="stats-row" style="margin-bottom:24px;">
+      <div class="stat-card">
+        <div class="stat-icon green">✅</div>
+        <div class="stat-info">
+          <p>Continuing</p>
+          <h3 id="stat-continue">—</h3>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon red">❌</div>
+        <div class="stat-info">
+          <p>Not Continuing</p>
+          <h3 id="stat-leave">—</h3>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon orange">⏳</div>
+        <div class="stat-info">
+          <p>Pending Response</p>
+          <h3 id="stat-pending">—</h3>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon blue">👨‍👩‍👧</div>
+        <div class="stat-info">
+          <p>Total Parents</p>
+          <h3 id="stat-total">—</h3>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 3: Responses -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📋 Parent Responses</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="hw-table">
+          <thead>
+            <tr>
+              <th>Student Name</th>
+              <th>Parent</th>
+              <th>Decision</th>
+              <th>Decided At</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="responses-body">
+            <tr>
+              <td colspan="5" style="text-align:center;padding:40px;">
+                <div class="spinner" style="margin:0 auto;"></div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/nav.js"></script>
+
+  <script>
+    let currentUser      = null;
+    let parentsList      = [];
+    let settingsListener = null;
+    let currentSettings  = {};
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    (async () => {
+      try {
+        currentUser = await requireAuth('teacher');
+        renderHeaderUser(currentUser);
+        renderPortalNav('registration', 'teacher');
+        document.getElementById('main-content').style.display = 'block';
+
+        parentsList = await loadParentsList();
+        document.getElementById('stat-total').textContent = parentsList.length;
+
+        loadSettings();
+      } catch {}
+    })();
+
+    // ── Load settings (real-time) ─────────────────────────────────────────────
+    function loadSettings() {
+      if (settingsListener) settingsListener();
+
+      settingsListener = db.collection('settings').doc('app')
+        .onSnapshot(snap => {
+          currentSettings = snap.exists ? snap.data() : {};
+          renderWindowStatus(currentSettings);
+          if (currentSettings.reregistrationYear) {
+            loadResponses(currentSettings.reregistrationYear);
+          } else {
+            renderResponses(parentsList, []);
+          }
+        }, err => console.error('Settings listener error:', err));
+    }
+
+    function renderWindowStatus(settings) {
+      const el = document.getElementById('window-status');
+      if (settings.reregistrationOpen) {
+        const year = settings.reregistrationYear || '—';
+        const deadline = settings.reregistrationDeadline
+          ? ' · Deadline: ' + settings.reregistrationDeadline
+          : '';
+        setAlert('window-status', 'success',
+          `✅ Window is OPEN for ${year}${deadline}`);
+      } else {
+        setAlert('window-status', 'error', '🔒 Registration window is currently closed.');
+      }
+
+      if (settings.reregistrationYear && !document.getElementById('rereg-year').value) {
+        document.getElementById('rereg-year').value = settings.reregistrationYear;
+      }
+      if (settings.reregistrationDeadline && !document.getElementById('rereg-deadline').value) {
+        document.getElementById('rereg-deadline').value = settings.reregistrationDeadline;
+      }
+    }
+
+    // ── Open / close window ───────────────────────────────────────────────────
+    async function openWindow() {
+      const year     = document.getElementById('rereg-year').value.trim();
+      const deadline = document.getElementById('rereg-deadline').value;
+
+      if (!year) { showToast('Missing', 'Please enter an academic year first.', '⚠️'); return; }
+
+      try {
+        await db.collection('settings').doc('app').set({
+          reregistrationOpen:     true,
+          reregistrationYear:     year,
+          reregistrationDeadline: deadline || null,
+          updatedAt:              firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        showToast('Window opened', `Re-registration is now open for ${year}.`, '✅');
+      } catch (err) {
+        showToast('Error', 'Could not update settings.', '❌');
+        console.error(err);
+      }
+    }
+
+    async function closeWindow() {
+      try {
+        await db.collection('settings').doc('app').set({
+          reregistrationOpen: false,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        showToast('Window closed', 'Re-registration window is now closed.', '🔒');
+      } catch (err) {
+        showToast('Error', 'Could not update settings.', '❌');
+        console.error(err);
+      }
+    }
+
+    // ── Load responses ────────────────────────────────────────────────────────
+    async function loadResponses(academicYear) {
+      try {
+        const snap = await db.collection('registrations')
+          .where('academicYear', '==', academicYear)
+          .get();
+        const responses = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderResponses(parentsList, responses);
+      } catch (err) {
+        console.error('Failed to load responses:', err);
+        renderResponses(parentsList, []);
+      }
+    }
+
+    // ── Render responses ──────────────────────────────────────────────────────
+    function renderResponses(parents, responses) {
+      const tbody = document.getElementById('responses-body');
+
+      const respMap = {};
+      responses.forEach(r => { respMap[r.parentId] = r; });
+
+      let continueCount = 0;
+      let leaveCount    = 0;
+      let pendingCount  = 0;
+
+      if (!parents.length) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5">
+              <div class="empty-state" style="padding:40px 24px;">
+                <div class="empty-icon">👨‍👩‍👧</div>
+                <h3>No parents registered yet</h3>
+                <p>Parents will appear here once they have accounts.</p>
+              </div>
+            </td>
+          </tr>`;
+        return;
+      }
+
+      tbody.innerHTML = parents.map(p => {
+        const resp = respMap[p.uid];
+        const studentName = p.childName || p.displayName;
+        let badge = '<span class="badge badge-warning">⏳ Pending</span>';
+        let decidedAt = '—';
+        let notes = '—';
+
+        if (resp) {
+          if (resp.decision === 'continue') {
+            badge = '<span class="badge badge-success">✅ Continuing</span>';
+            continueCount++;
+          } else if (resp.decision === 'not_continue') {
+            badge = '<span class="badge badge-danger">❌ Not continuing</span>';
+            leaveCount++;
+          } else {
+            pendingCount++;
+          }
+          if (resp.decidedAt) decidedAt = formatDate(resp.decidedAt);
+          if (resp.notes) notes = escHtml(resp.notes);
+        } else {
+          pendingCount++;
+        }
+
+        return `
+          <tr>
+            <td>${escHtml(studentName)}</td>
+            <td>${escHtml(p.displayName)}</td>
+            <td>${badge}</td>
+            <td>${decidedAt}</td>
+            <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${notes}</td>
+          </tr>`;
+      }).join('');
+
+      document.getElementById('stat-continue').textContent = continueCount;
+      document.getElementById('stat-leave').textContent    = leaveCount;
+      document.getElementById('stat-pending').textContent  = pendingCount;
+      document.getElementById('stat-total').textContent    = parents.length;
+    }
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    window.addEventListener('beforeunload', () => {
+      if (settingsListener) settingsListener();
+    });
+  </script>
+</body>
+</html>

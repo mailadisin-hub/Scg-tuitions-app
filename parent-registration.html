@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — Re-registration</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+</head>
+<body>
+
+  <header class="app-header">
+    <a class="logo" href="#">
+      <div class="logo-icon">SCG</div>
+      <div class="logo-text">
+        <span class="logo-name">SCG Tuitions</span>
+        <span class="logo-tagline">Parent Portal</span>
+      </div>
+    </a>
+    <div class="header-right">
+      <div class="user-badge" id="user-badge">…</div>
+      <button class="btn-logout" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="page-wrapper" style="max-width:640px;" id="main-content" style="display:none;">
+
+    <!-- STATE A: Window closed -->
+    <div id="state-closed" style="display:none;">
+      <div class="card">
+        <div class="card-body">
+          <div class="empty-state">
+            <div class="empty-icon">📅</div>
+            <h3>Re-registration is not open yet</h3>
+            <p>Your teacher will notify you when it's time to confirm your child's place for next year.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATE B: Window open, no decision -->
+    <div id="state-open" style="display:none;">
+      <div class="rereg-open-banner" style="background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border-radius:12px;padding:24px;margin-bottom:0;">
+        <div>
+          <h3 style="margin:0 0 8px;font-size:18px;">📝 Re-registration is now open!</h3>
+          <p style="margin:0;font-size:14px;opacity:0.9;">Please confirm whether <strong id="child-name-display">your child</strong> will be continuing with SCG Tuitions for <strong id="rereg-year-display">next year</strong>.</p>
+          <p id="rereg-deadline-display" style="margin-top:4px;font-size:13px;opacity:0.85;"></p>
+        </div>
+      </div>
+      <div class="card" style="margin-top:20px;">
+        <div class="card-body">
+          <div id="rereg-alert" class="alert alert-error" style="display:none;"></div>
+          <p style="margin-bottom:20px;font-size:15px;">Please let us know your decision:</p>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
+            <button class="btn btn-success" style="flex:1;min-width:160px;" onclick="saveDecision('continue')">✅ Continue next year</button>
+            <button class="btn btn-danger" style="flex:1;min-width:160px;" onclick="saveDecision('not_continue')">❌ Will not be continuing</button>
+          </div>
+          <div class="form-group">
+            <label for="rereg-notes">Additional notes (optional)</label>
+            <textarea id="rereg-notes" placeholder="Anything you'd like us to know…" maxlength="500" style="min-height:80px;"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATE C: Decision already made -->
+    <div id="state-decided" style="display:none;">
+      <div class="card">
+        <div class="card-body">
+          <div class="read-confirmed-section" id="decision-confirmed-box" style="text-align:center;padding:24px 0;">
+            <h3 id="decision-confirmed-text" style="font-size:18px;margin-bottom:8px;">✅ You have confirmed continuation</h3>
+            <p id="decision-confirmed-time" style="color:var(--text-muted);font-size:14px;">Decision made on …</p>
+          </div>
+          <div style="text-align:center;">
+            <button class="btn btn-secondary btn-sm" style="margin-top:16px;" onclick="changeDecision()">Change my decision</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/nav.js"></script>
+
+  <script>
+    let currentUser     = null;
+    let appSettings     = {};
+    let existingReg     = null;
+    let childName       = '';
+    let pendingDecision = null; // for changeDecision flow
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    (async () => {
+      try {
+        currentUser = await requireAuth('parent');
+        renderHeaderUser(currentUser);
+        renderPortalNav('registration', 'parent');
+        document.getElementById('main-content').style.display = 'block';
+        childName = currentUser.childName || currentUser.displayName || 'your child';
+        loadReregistrationState();
+      } catch {}
+    })();
+
+    // ── Load re-registration state ────────────────────────────────────────────
+    async function loadReregistrationState() {
+      try {
+        const [settingsSnap, regSnap] = await Promise.all([
+          db.collection('settings').doc('app').get(),
+          db.collection('registrations').doc(currentUser.uid).get(),
+        ]);
+
+        appSettings = settingsSnap.exists ? settingsSnap.data() : {};
+        existingReg = regSnap.exists ? regSnap.data() : null;
+
+        renderState(appSettings, existingReg);
+      } catch (err) {
+        console.error('Failed to load re-registration state:', err);
+        renderState({}, null);
+      }
+    }
+
+    // ── Render state ──────────────────────────────────────────────────────────
+    function renderState(settings, reg) {
+      // Hide all states
+      document.getElementById('state-closed').style.display  = 'none';
+      document.getElementById('state-open').style.display    = 'none';
+      document.getElementById('state-decided').style.display = 'none';
+
+      const isOpen = settings.reregistrationOpen === true;
+
+      if (!isOpen) {
+        // State A
+        document.getElementById('state-closed').style.display = 'block';
+        return;
+      }
+
+      // Window is open
+      const year = settings.reregistrationYear || 'next year';
+      document.getElementById('child-name-display').textContent = childName;
+      document.getElementById('rereg-year-display').textContent = year;
+
+      if (settings.reregistrationDeadline) {
+        const d = new Date(settings.reregistrationDeadline + 'T00:00:00');
+        document.getElementById('rereg-deadline-display').textContent =
+          'Please respond by: ' + d.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+      } else {
+        document.getElementById('rereg-deadline-display').textContent = '';
+      }
+
+      if (reg && reg.decision && pendingDecision === null) {
+        // State C: decision already made
+        document.getElementById('state-decided').style.display = 'block';
+        const isContinue = reg.decision === 'continue';
+        document.getElementById('decision-confirmed-text').textContent =
+          isContinue ? '✅ You have confirmed continuation' : '❌ You have confirmed you will not be continuing';
+        document.getElementById('decision-confirmed-time').textContent =
+          reg.decidedAt ? 'Decision made on ' + formatDate(reg.decidedAt) : '';
+      } else {
+        // State B
+        document.getElementById('state-open').style.display = 'block';
+      }
+    }
+
+    // ── Save decision ─────────────────────────────────────────────────────────
+    async function saveDecision(decision) {
+      clearAlert('rereg-alert');
+      const notes = document.getElementById('rereg-notes').value.trim();
+      const year  = appSettings.reregistrationYear || '';
+      const parentName = currentUser.displayName || '';
+
+      try {
+        const data = {
+          parentId:     currentUser.uid,
+          parentName,
+          studentName:  childName,
+          academicYear: year,
+          decision,
+          decidedAt:    firebase.firestore.FieldValue.serverTimestamp(),
+          notes:        notes || null,
+          updatedAt:    firebase.firestore.FieldValue.serverTimestamp(),
+        };
+
+        await db.collection('registrations').doc(currentUser.uid).set(data, { merge: true });
+
+        existingReg     = { ...data, decidedAt: { toDate: () => new Date() } };
+        pendingDecision = null;
+
+        renderState(appSettings, existingReg);
+        showToast(
+          'Decision saved',
+          decision === 'continue' ? 'Confirmed — see you next year!' : 'Decision recorded. Thank you for letting us know.',
+          decision === 'continue' ? '✅' : '📝'
+        );
+      } catch (err) {
+        setAlert('rereg-alert', 'error', 'Failed to save decision. Please try again.');
+        console.error(err);
+      }
+    }
+
+    // ── Change decision ───────────────────────────────────────────────────────
+    function changeDecision() {
+      pendingDecision = 'change';
+      document.getElementById('rereg-notes').value = existingReg && existingReg.notes ? existingReg.notes : '';
+      renderState(appSettings, null); // pass null to force state B
+    }
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    window.addEventListener('beforeunload', () => {});
+  </script>
+</body>
+</html>

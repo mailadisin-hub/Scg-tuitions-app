@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — Payments</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+</head>
+<body>
+
+  <header class="app-header">
+    <a class="logo" href="#">
+      <div class="logo-icon">SCG</div>
+      <div class="logo-text">
+        <span class="logo-name">SCG Tuitions</span>
+        <span class="logo-tagline">Parent Portal</span>
+      </div>
+    </a>
+    <div class="header-right">
+      <div class="user-badge" id="user-badge">…</div>
+      <button class="btn-logout" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="page-wrapper" id="main-content" style="display:none;">
+
+    <!-- Stats row -->
+    <div class="stats-row" style="margin-bottom:24px;">
+      <div class="stat-card">
+        <div class="stat-icon orange">⏳</div>
+        <div class="stat-info">
+          <p>Outstanding</p>
+          <h3 id="stat-outstanding">—</h3>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green">✅</div>
+        <div class="stat-info">
+          <p>Paid This Year</p>
+          <h3 id="stat-paid">—</h3>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon blue">📅</div>
+        <div class="stat-info">
+          <p>Next Due Date</p>
+          <h3 id="stat-due">—</h3>
+        </div>
+      </div>
+    </div>
+
+    <!-- Payments list -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header">
+        <span class="card-title">💳 Payment Records</span>
+      </div>
+      <div id="payments-list" style="padding:8px 16px 16px;">
+        <div style="text-align:center;padding:40px;">
+          <div class="spinner" style="margin:0 auto;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bank details -->
+    <div class="card" id="bank-card">
+      <div class="card-header">
+        <span class="card-title">🏦 How to Pay by Bank Transfer</span>
+      </div>
+      <div class="card-body">
+        <div class="invoice-box" id="bank-details-box">Loading payment details…</div>
+        <p style="font-size:13px;color:var(--text-muted);margin-top:12px;">Please use your child's name as the payment reference.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Invoice Modal -->
+  <div id="invoice-modal" class="message-detail" onclick="closeInvoiceIfBg(event)">
+    <div class="message-modal" style="max-width:600px;">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h2>Invoice</h2>
+          <p id="inv-ref">—</p>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-blue btn-sm no-print" onclick="window.print()">🖨️ Print / Save PDF</button>
+          <button class="modal-close no-print" onclick="document.getElementById('invoice-modal').classList.remove('open')">✕</button>
+        </div>
+      </div>
+      <div class="modal-body" id="invoice-print-area">
+        <div id="printable-invoice">
+          <!-- populated by renderInvoice() -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/nav.js"></script>
+
+  <script>
+    let currentUser   = null;
+    let payListener   = null;
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    (async () => {
+      try {
+        currentUser = await requireAuth('parent');
+        renderHeaderUser(currentUser);
+        renderPortalNav('payments', 'parent');
+        document.getElementById('main-content').style.display = 'block';
+        loadPayments();
+        loadBankDetails();
+      } catch {}
+    })();
+
+    // ── Load payments ─────────────────────────────────────────────────────────
+    function loadPayments() {
+      if (payListener) payListener();
+
+      payListener = db.collection('payments')
+        .where('parentId', '==', currentUser.uid)
+        .orderBy('dueDate', 'desc')
+        .onSnapshot(snap => {
+          const records = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          updateStats(records);
+          renderPayments(records);
+        }, err => console.error('Payments listener error:', err));
+    }
+
+    // ── Update stats ──────────────────────────────────────────────────────────
+    function updateStats(records) {
+      const now = new Date();
+      const thisYear = now.getFullYear();
+
+      const outstandingPence = records
+        .filter(r => !r.paid)
+        .reduce((s, r) => s + (r.amountDue || 0), 0);
+
+      const paidThisYearPence = records
+        .filter(r => r.paid && r.paidAt && r.paidAt.toDate().getFullYear() === thisYear)
+        .reduce((s, r) => s + (r.amountDue || 0), 0);
+
+      const unpaidDates = records
+        .filter(r => !r.paid && r.dueDate)
+        .map(r => r.dueDate.toDate())
+        .sort((a, b) => a - b);
+
+      document.getElementById('stat-outstanding').textContent =
+        outstandingPence > 0 ? '£' + (outstandingPence / 100).toFixed(2) : '£0.00';
+      document.getElementById('stat-paid').textContent =
+        '£' + (paidThisYearPence / 100).toFixed(2);
+      document.getElementById('stat-due').textContent =
+        unpaidDates.length > 0
+          ? unpaidDates[0].toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+          : '—';
+    }
+
+    // ── Render payments ───────────────────────────────────────────────────────
+    function renderPayments(records) {
+      const list = document.getElementById('payments-list');
+
+      if (!records.length) {
+        list.innerHTML = `
+          <div class="empty-state" style="padding:40px 24px;">
+            <div class="empty-icon">💳</div>
+            <h3>No payment records yet</h3>
+            <p>Your tuition payment records will appear here.</p>
+          </div>`;
+        return;
+      }
+
+      const now = new Date();
+      list.innerHTML = records.map(r => {
+        const amount = '£' + ((r.amountDue || 0) / 100).toFixed(2);
+        const dueDate = r.dueDate ? r.dueDate.toDate() : null;
+        const isOverdue = !r.paid && dueDate && dueDate < now;
+        const cardClass = r.paid ? 'paid' : 'outstanding';
+
+        let badge = '';
+        if (r.paid)         badge = '<span class="badge badge-success">Paid</span>';
+        else if (isOverdue) badge = '<span class="badge badge-danger">Overdue</span>';
+        else                badge = '<span class="badge badge-warning">Pending</span>';
+
+        const payBtns = !r.paid ? `
+          ${r.stripePaymentLink ? `<a class="btn btn-primary btn-sm" href="${escHtml(r.stripePaymentLink)}" target="_blank" rel="noopener">Pay with Stripe 🔗</a>` : ''}
+          ${r.sumupPaymentLink  ? `<a class="btn btn-secondary btn-sm" href="${escHtml(r.sumupPaymentLink)}" target="_blank" rel="noopener">Pay with SumUp 🔗</a>` : ''}
+        ` : '';
+
+        return `
+          <div class="payment-card ${cardClass}" style="padding:14px;border-radius:10px;border:1px solid ${r.paid ? '#bbf7d0' : '#fde68a'};background:${r.paid ? '#f0fdf4' : '#fffbeb'};margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;">
+              <div>
+                <strong style="font-size:15px;">${escHtml(r.termName || '—')}</strong>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span class="payment-amount" style="font-size:17px;font-weight:700;">${amount}</span>
+                ${badge}
+              </div>
+            </div>
+            <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">
+              Due: ${dueDate ? formatDate(r.dueDate) : '—'}
+              ${r.paid && r.paidAt ? '&nbsp;·&nbsp; Paid: ' + formatDate(r.paidAt) : ''}
+              ${r.paymentMethod ? '&nbsp;·&nbsp; Via: ' + escHtml(r.paymentMethod.replace('_', ' ')) : ''}
+            </div>
+            <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+              ${payBtns}
+              <button class="btn btn-secondary btn-sm" onclick="openInvoice('${r.id}')">📄 View Invoice</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // ── Load bank details ─────────────────────────────────────────────────────
+    async function loadBankDetails() {
+      try {
+        const snap = await db.collection('settings').doc('app').get();
+        const box = document.getElementById('bank-details-box');
+        if (!snap.exists || !snap.data().bankDetails) {
+          box.innerHTML = '<p style="color:var(--text-muted);">Bank details not yet configured. Please contact your tutor.</p>';
+          return;
+        }
+        const d = snap.data().bankDetails;
+        box.innerHTML = `
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            ${d.accountName  ? `<tr><td style="padding:6px 0;color:var(--text-muted);width:140px;">Account Name:</td><td style="padding:6px 0;font-weight:600;">${escHtml(d.accountName)}</td></tr>` : ''}
+            ${d.sortCode     ? `<tr><td style="padding:6px 0;color:var(--text-muted);">Sort Code:</td><td style="padding:6px 0;font-weight:600;">${escHtml(d.sortCode)}</td></tr>` : ''}
+            ${d.accountNumber? `<tr><td style="padding:6px 0;color:var(--text-muted);">Account Number:</td><td style="padding:6px 0;font-weight:600;">${escHtml(d.accountNumber)}</td></tr>` : ''}
+            ${d.bankName     ? `<tr><td style="padding:6px 0;color:var(--text-muted);">Bank:</td><td style="padding:6px 0;font-weight:600;">${escHtml(d.bankName)}</td></tr>` : ''}
+            ${d.reference    ? `<tr><td style="padding:6px 0;color:var(--text-muted);">Reference:</td><td style="padding:6px 0;font-weight:600;">${escHtml(d.reference)}</td></tr>` : ''}
+          </table>`;
+      } catch (err) {
+        document.getElementById('bank-details-box').innerHTML =
+          '<p style="color:var(--text-muted);">Could not load bank details.</p>';
+        console.error(err);
+      }
+    }
+
+    // ── Open invoice modal ────────────────────────────────────────────────────
+    async function openInvoice(id) {
+      try {
+        const snap = await db.collection('payments').doc(id).get();
+        if (!snap.exists) { showToast('Error', 'Invoice not found.', '❌'); return; }
+        const payment = { id: snap.id, ...snap.data() };
+        renderInvoice(payment);
+        document.getElementById('invoice-modal').classList.add('open');
+      } catch (err) {
+        showToast('Error', 'Could not load invoice.', '❌');
+        console.error(err);
+      }
+    }
+
+    function closeInvoiceIfBg(e) {
+      if (e.target.id === 'invoice-modal') document.getElementById('invoice-modal').classList.remove('open');
+    }
+
+    // ── Render invoice ────────────────────────────────────────────────────────
+    function renderInvoice(p) {
+      document.getElementById('inv-ref').textContent = p.invoiceNumber || '—';
+      const amount = ((p.amountDue || 0) / 100).toFixed(2);
+      const statusText = p.paid
+        ? '✅ PAID on ' + formatDate(p.paidAt)
+        : '⏳ OUTSTANDING';
+
+      document.getElementById('printable-invoice').innerHTML = `
+        <div class="invoice-print-header" style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+          <div class="invoice-logo" style="width:52px;height:52px;background:#16a34a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;border-radius:10px;letter-spacing:-1px;flex-shrink:0;">SCG</div>
+          <div class="invoice-company">
+            <h1 style="font-size:20px;color:#1e3a8a;font-weight:800;margin:0;">SCG Tuitions</h1>
+            <p style="font-size:13px;color:#64748b;margin:2px 0 0;">Personalised Learning for Every Child<br>Swindon, UK · info@scgtuitions.co.uk</p>
+          </div>
+        </div>
+        <hr style="border:1px solid #dbeafe;margin:16px 0;">
+        <table class="invoice-table" style="width:100%;border-collapse:collapse;">
+          <tr><td style="padding:8px 0;color:#64748b;width:160px;font-size:14px;">Invoice Ref:</td><td style="padding:8px 0;font-size:14px;"><strong>${escHtml(p.invoiceNumber || '—')}</strong></td></tr>
+          <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Date Issued:</td><td style="padding:8px 0;font-size:14px;">${formatDate(p.createdAt)}</td></tr>
+          <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Student:</td><td style="padding:8px 0;font-size:14px;">${escHtml(p.studentName || '—')}</td></tr>
+          <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Parent/Guardian:</td><td style="padding:8px 0;font-size:14px;">${escHtml(p.parentName || '—')}</td></tr>
+          <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Term:</td><td style="padding:8px 0;font-size:14px;">${escHtml(p.termName || '—')}</td></tr>
+          <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Amount Due:</td><td style="padding:8px 0;font-size:14px;"><strong>£${amount}</strong></td></tr>
+          <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Due Date:</td><td style="padding:8px 0;font-size:14px;">${formatDate(p.dueDate)}</td></tr>
+          <tr><td style="padding:8px 0;color:#64748b;font-size:14px;">Status:</td><td style="padding:8px 0;font-size:14px;">${statusText}</td></tr>
+        </table>
+        <div class="invoice-footer" style="margin-top:32px;padding-top:12px;border-top:1px solid #dbeafe;font-size:12px;color:#94a3b8;">
+          <p>SCG Tuitions Ltd · Swindon, UK · info@scgtuitions.co.uk · 07568 409082</p>
+          <p style="margin-top:4px;">Thank you for your continued support.</p>
+        </div>`;
+    }
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    window.addEventListener('beforeunload', () => {
+      if (payListener) payListener();
+    });
+  </script>
+</body>
+</html>

@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="css/style.css">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#0d2137">
+  <meta name="theme-color" content="#1e3a8a">
 </head>
 <body>
   <div class="login-page">
@@ -144,8 +144,8 @@
         if (snap.exists) {
           const role = snap.data().role;
           window.location.href = role === 'teacher'
-            ? 'teacher-dashboard.html'
-            : 'parent-dashboard.html';
+            ? 'teacher-chat.html'
+            : 'parent-chat.html';
         }
       } catch {}
     });

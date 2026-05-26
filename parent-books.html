@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — Books &amp; Resources</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+</head>
+<body>
+
+  <header class="app-header">
+    <a class="logo" href="#">
+      <div class="logo-icon">SCG</div>
+      <div class="logo-text">
+        <span class="logo-name">SCG Tuitions</span>
+        <span class="logo-tagline">Parent Portal</span>
+      </div>
+    </a>
+    <div class="header-right">
+      <div class="user-badge" id="user-badge">…</div>
+      <button class="btn-logout" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="page-wrapper" id="main-content" style="display:none;">
+
+    <!-- Intro stat card -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-body" style="display:flex;align-items:center;gap:32px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="stat-icon green" style="width:48px;height:48px;font-size:22px;border-radius:12px;display:flex;align-items:center;justify-content:center;">📖</div>
+          <div>
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:2px;">Your Books &amp; Resources</p>
+            <div style="display:flex;align-items:baseline;gap:20px;flex-wrap:wrap;">
+              <div>
+                <span style="font-size:28px;font-weight:700;color:var(--primary);" id="stat-total-books">—</span>
+                <span style="font-size:13px;color:var(--text-muted);margin-left:4px;">total books</span>
+              </div>
+              <div>
+                <span style="font-size:28px;font-weight:700;color:var(--accent);" id="stat-halfterms">—</span>
+                <span style="font-size:13px;color:var(--text-muted);margin-left:4px;">half-terms</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Half-term grouped books -->
+    <div id="books-container">
+      <div class="loader"><div class="spinner"></div></div>
+    </div>
+
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/nav.js"></script>
+
+  <style>
+    .half-term-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .half-term-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      background: linear-gradient(135deg, #f0f7ff 0%, #e8f4e8 100%);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .half-term-label {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--primary-dark);
+    }
+    .half-term-count {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .book-list {
+      padding: 12px 20px;
+    }
+    .book-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 6px 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .book-item:last-child {
+      border-bottom: none;
+    }
+    .book-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .book-title {
+      font-size: 14px;
+      color: var(--text);
+      line-height: 1.5;
+    }
+  </style>
+
+  <script>
+    let currentUser   = null;
+    let booksListener = null;
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    (async () => {
+      try {
+        currentUser = await requireAuth('parent');
+        renderHeaderUser(currentUser);
+        renderPortalNav('books', 'parent');
+        document.getElementById('main-content').style.display = 'block';
+        loadBooks();
+      } catch {}
+    })();
+
+    // ── Load books ────────────────────────────────────────────────────────────
+    function loadBooks() {
+      if (booksListener) booksListener();
+
+      booksListener = db.collection('books')
+        .where('studentId', '==', currentUser.uid)
+        .orderBy('givenAt', 'desc')
+        .onSnapshot(snap => {
+          const records = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          updateStats(records);
+          renderBookGroups(records);
+        }, err => console.error('Books listener error:', err));
+    }
+
+    // ── Update stats ──────────────────────────────────────────────────────────
+    function updateStats(records) {
+      // Count total unique titles across all records
+      const totalTitles = records.reduce((sum, r) => sum + (r.titles ? r.titles.length : 0), 0);
+      // Count unique halfTerm values
+      const uniqueHalfTerms = new Set(records.map(r => r.halfTerm).filter(Boolean)).size;
+
+      document.getElementById('stat-total-books').textContent = totalTitles;
+      document.getElementById('stat-halfterms').textContent   = uniqueHalfTerms;
+    }
+
+    // ── Render half-term groups ───────────────────────────────────────────────
+    function renderBookGroups(records) {
+      const container = document.getElementById('books-container');
+
+      if (!records.length) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📖</div>
+            <h3>No books recorded yet</h3>
+            <p>Books and resources provided by your teacher will appear here.</p>
+          </div>`;
+        return;
+      }
+
+      // Group by halfTerm preserving insertion order (records already ordered by givenAt desc)
+      const groups = new Map();
+      records.forEach(r => {
+        const key = r.halfTerm || 'Other';
+        if (!groups.has(key)) {
+          groups.set(key, []);
+        }
+        groups.get(key).push(r);
+      });
+
+      let html = '';
+      groups.forEach((groupRecords, halfTerm) => {
+        // Aggregate all titles in this half-term group
+        const allTitles = groupRecords.flatMap(r => r.titles || []);
+        const allNotes  = groupRecords.map(r => r.notes).filter(Boolean);
+        const latestDate = groupRecords[0].givenAt; // first is most recent (desc order)
+        const count = allTitles.length;
+
+        const titlesHtml = allTitles
+          .map(t => `
+            <div class="book-item">
+              <span class="book-icon">📗</span>
+              <span class="book-title">${escHtml(t)}</span>
+            </div>`)
+          .join('');
+
+        const notesHtml = allNotes
+          .map(n => `
+            <div class="book-item" style="color:var(--text-muted);font-size:13px;">
+              <span class="book-icon">📝</span>
+              <span>${escHtml(n)}</span>
+            </div>`)
+          .join('');
+
+        html += `
+          <div class="half-term-card">
+            <div class="half-term-card-header">
+              <span class="half-term-label">📖 ${escHtml(halfTerm)}</span>
+              <span class="half-term-count">${count} book${count !== 1 ? 's' : ''} · ${formatDate(latestDate)}</span>
+            </div>
+            <div class="book-list">
+              ${titlesHtml}
+              ${notesHtml}
+            </div>
+          </div>`;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    window.addEventListener('beforeunload', () => {
+      if (booksListener) booksListener();
+    });
+  </script>
+</body>
+</html>
