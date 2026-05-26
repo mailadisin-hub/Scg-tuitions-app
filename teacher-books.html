@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — Books</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+</head>
+<body>
+
+  <header class="app-header">
+    <a class="logo" href="#">
+      <div class="logo-icon">SCG</div>
+      <div class="logo-text">
+        <span class="logo-name">SCG Tuitions</span>
+        <span class="logo-tagline">Teacher Portal</span>
+      </div>
+    </a>
+    <div class="header-right">
+      <div class="user-badge" id="user-badge">…</div>
+      <button class="btn-logout" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="page-wrapper-wide" id="main-content" style="display:none;">
+    <div class="dashboard-grid">
+
+      <!-- ── Left: Record Books Given ── -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📖 Record Books Given</span>
+          </div>
+          <div class="card-body">
+            <div id="books-alert" class="alert alert-error" style="display:none;"></div>
+
+            <form id="books-form" onsubmit="submitBooks(event)">
+              <div class="form-group">
+                <label for="books-student">Student</label>
+                <select id="books-student" required>
+                  <option value="">— Select a student —</option>
+                </select>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="books-halfterm">Half Term</label>
+                  <select id="books-halfterm" required>
+                    <option value="Autumn 1">Autumn 1</option>
+                    <option value="Autumn 2">Autumn 2</option>
+                    <option value="Spring 1">Spring 1</option>
+                    <option value="Spring 2">Spring 2</option>
+                    <option value="Summer 1">Summer 1</option>
+                    <option value="Summer 2">Summer 2</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="books-year">Academic Year</label>
+                  <input id="books-year" type="text" placeholder="e.g. 2025-2026" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Book Titles</label>
+                <div id="books-inputs-container">
+                  <input type="text" class="book-title-input" placeholder="Book title" maxlength="120" style="margin-bottom:8px;">
+                </div>
+                <a href="#" onclick="addBookInput(); return false;"
+                   style="font-size:13px;color:var(--primary-light);text-decoration:none;display:inline-block;margin-top:4px;">
+                  + Add another book
+                </a>
+              </div>
+
+              <div class="form-group">
+                <label for="books-notes">Notes (optional)</label>
+                <textarea id="books-notes" placeholder="Optional notes" maxlength="300"></textarea>
+              </div>
+
+              <button class="btn btn-primary btn-full" type="submit" id="books-btn">
+                📖 Save Books
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Right: Books Records ── -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📋 Books Records</span>
+          </div>
+          <div class="card-body" style="padding-bottom:8px;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="books-filter-student">Filter by student</label>
+              <select id="books-filter-student" onchange="filterBooks()">
+                <option value="">All students</option>
+              </select>
+            </div>
+          </div>
+          <div id="books-list">
+            <div class="loader"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/nav.js"></script>
+
+  <script>
+    let currentUser  = null;
+    let parentsList  = [];
+    let allRecords   = [];
+    let booksListener = null;
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    (async () => {
+      try {
+        currentUser = await requireAuth('teacher');
+        renderHeaderUser(currentUser);
+        renderPortalNav('books', 'teacher');
+        document.getElementById('main-content').style.display = 'block';
+
+        // Default academic year
+        document.getElementById('books-year').value = currentAcademicYear();
+
+        parentsList = await loadParentsList();
+        populateParentSelect('books-student', parentsList);
+        populateFilterSelect();
+        subscribeBooks();
+      } catch {}
+    })();
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    function currentAcademicYear() {
+      const now   = new Date();
+      const year  = now.getFullYear();
+      const month = now.getMonth() + 1; // 1-12
+      // Academic year starts in September
+      if (month >= 9) {
+        return `${year}-${year + 1}`;
+      } else {
+        return `${year - 1}-${year}`;
+      }
+    }
+
+    function populateFilterSelect() {
+      const sel = document.getElementById('books-filter-student');
+      sel.innerHTML = '<option value="">All students</option>';
+      parentsList.forEach(p => {
+        const label = p.childName
+          ? `${p.displayName} — ${p.childName}`
+          : p.displayName;
+        sel.innerHTML += `<option value="${p.uid}">${escHtml(label)}</option>`;
+      });
+    }
+
+    // ── Add another book input ────────────────────────────────────────────────
+    function addBookInput() {
+      const container = document.getElementById('books-inputs-container');
+      const inputs = container.querySelectorAll('input.book-title-input');
+      if (inputs.length >= 10) {
+        showToast('Limit reached', 'You can add up to 10 book titles.', 'ℹ️');
+        return;
+      }
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'book-title-input';
+      input.placeholder = 'Book title';
+      input.maxLength = 120;
+      input.style.marginBottom = '8px';
+      container.appendChild(input);
+    }
+
+    // ── Submit books ──────────────────────────────────────────────────────────
+    async function submitBooks(e) {
+      e.preventDefault();
+      clearAlert('books-alert');
+
+      const studentId  = document.getElementById('books-student').value;
+      const halfTerm   = document.getElementById('books-halfterm').value;
+      const year       = document.getElementById('books-year').value.trim();
+      const notes      = document.getElementById('books-notes').value.trim();
+
+      if (!studentId) {
+        setAlert('books-alert', 'error', 'Please select a student.');
+        return;
+      }
+
+      const container = document.getElementById('books-inputs-container');
+      const inputs    = container.querySelectorAll('input.book-title-input');
+      const titles    = Array.from(inputs)
+        .map(i => i.value.trim())
+        .filter(t => t.length > 0);
+
+      if (!titles.length) {
+        setAlert('books-alert', 'error', 'Please enter at least one book title.');
+        return;
+      }
+
+      const parent      = parentsList.find(p => p.uid === studentId);
+      const studentName = parent ? (parent.childName || parent.displayName) : studentId;
+
+      // Format half term label e.g. "Autumn 1 2025-26"
+      const yearShort  = year.replace(/(\d{4})-(\d{4})/, (_, a, b) => `${a}-${b.slice(2)}`);
+      const halfTermFull = `${halfTerm} ${yearShort}`;
+
+      const btn = document.getElementById('books-btn');
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+
+      try {
+        await db.collection('books').add({
+          teacherId:    currentUser.uid,
+          studentId,
+          studentName,
+          halfTerm:     halfTermFull,
+          academicYear: year,
+          titles,
+          notes,
+          givenAt:      firebase.firestore.FieldValue.serverTimestamp(),
+          createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
+        });
+
+        document.getElementById('books-form').reset();
+        document.getElementById('books-year').value = currentAcademicYear();
+        // Reset book inputs to a single empty input
+        const c = document.getElementById('books-inputs-container');
+        c.innerHTML = '<input type="text" class="book-title-input" placeholder="Book title" maxlength="120" style="margin-bottom:8px;">';
+
+        showToast('Books saved', `${titles.length} book(s) recorded for ${studentName}.`, '📖');
+      } catch (err) {
+        setAlert('books-alert', 'error', 'Failed to save books. Please try again.');
+        console.error(err);
+      }
+
+      btn.disabled = false;
+      btn.textContent = '📖 Save Books';
+    }
+
+    // ── Subscribe to books records ────────────────────────────────────────────
+    function subscribeBooks() {
+      if (booksListener) booksListener();
+
+      booksListener = db.collection('books')
+        .where('teacherId', '==', currentUser.uid)
+        .orderBy('givenAt', 'desc')
+        .onSnapshot(snap => {
+          allRecords = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          filterBooks();
+        }, err => console.error('Books listener error:', err));
+    }
+
+    // ── Filter records ────────────────────────────────────────────────────────
+    function filterBooks() {
+      const selectedId = document.getElementById('books-filter-student').value;
+      const filtered = selectedId
+        ? allRecords.filter(r => r.studentId === selectedId)
+        : allRecords;
+      renderBooks(filtered);
+    }
+
+    // ── Render books records ──────────────────────────────────────────────────
+    function renderBooks(records) {
+      const list = document.getElementById('books-list');
+
+      if (!records.length) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📖</div>
+            <h3>No books recorded yet</h3>
+            <p>Use the form on the left to record books given to students.</p>
+          </div>`;
+        return;
+      }
+
+      list.innerHTML = records.map(r => {
+        const titlesList = (r.titles || [])
+          .map(t => `<div style="font-size:13px;padding:2px 0;">• ${escHtml(t)}</div>`)
+          .join('');
+        const count = (r.titles || []).length;
+
+        return `
+          <div class="sent-message-item">
+            <div class="sent-msg-header">
+              <span class="sent-msg-to">${escHtml(r.studentName)}</span>
+              <span><span class="badge badge-info">${count} book${count !== 1 ? 's' : ''}</span></span>
+            </div>
+            <div class="sent-msg-subject">${escHtml(r.halfTerm || '')}</div>
+            <div style="margin:6px 0 4px;">${titlesList}</div>
+            ${r.notes ? `<div class="sent-msg-preview">${escHtml(r.notes)}</div>` : ''}
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
+              <span class="sent-msg-time">${formatDate(r.givenAt)}</span>
+              <button class="btn btn-danger btn-sm" onclick="deleteRecord('${r.id}')">Delete</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // ── Delete record ─────────────────────────────────────────────────────────
+    async function deleteRecord(id) {
+      if (!window.confirm('Delete this books record?')) return;
+      try {
+        await db.collection('books').doc(id).delete();
+        showToast('Deleted', 'Books record removed.', '🗑️');
+      } catch (err) {
+        showToast('Error', 'Could not delete record. Please try again.', '❌');
+        console.error(err);
+      }
+    }
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    window.addEventListener('beforeunload', () => {
+      if (booksListener) booksListener();
+    });
+  </script>
+</body>
+</html>

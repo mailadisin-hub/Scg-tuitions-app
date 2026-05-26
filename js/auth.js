@@ -1,5 +1,12 @@
 // ─── Shared Auth Utilities ───────────────────────────────────────────────────
 
+// Shared utility
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // Redirect if not logged in; return current user profile from Firestore
 async function requireAuth(expectedRole) {
   return new Promise((resolve, reject) => {
@@ -18,10 +25,9 @@ async function requireAuth(expectedRole) {
         }
         const profile = { uid: user.uid, ...snap.data() };
         if (expectedRole && profile.role !== expectedRole) {
-          // Redirect to correct dashboard
           window.location.href = profile.role === 'teacher'
-            ? 'teacher-dashboard.html'
-            : 'parent-dashboard.html';
+            ? 'teacher-chat.html'
+            : 'parent-chat.html';
           return reject('wrong-role');
         }
         resolve(profile);
@@ -85,4 +91,35 @@ function setAlert(elId, type, msg) {
 function clearAlert(elId) {
   const el = document.getElementById(elId);
   if (el) el.style.display = 'none';
+}
+
+// Format a date for display (short)
+function formatDate(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// Load all registered parents — used by every teacher page with a student selector
+async function loadParentsList() {
+  const snap = await db.collection('users').where('role', '==', 'parent').orderBy('displayName').get();
+  return snap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+}
+
+// Populate a <select> element with parents list
+function populateParentSelect(selectId, parents) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Select a student —</option>';
+  parents.forEach(p => {
+    const label = p.childName
+      ? `${p.displayName} — ${p.childName}${p.childYear ? ', ' + p.childYear : ''}`
+      : p.displayName;
+    sel.innerHTML += `<option value="${p.uid}">${escHtml(label)}</option>`;
+  });
+}
+
+// Get initials from a display name
+function getInitials(name) {
+  return (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 }

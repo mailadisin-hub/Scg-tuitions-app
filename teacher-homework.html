@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — Homework</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+</head>
+<body>
+
+  <header class="app-header">
+    <a class="logo" href="#">
+      <div class="logo-icon">SCG</div>
+      <div class="logo-text">
+        <span class="logo-name">SCG Tuitions</span>
+        <span class="logo-tagline">Teacher Portal</span>
+      </div>
+    </a>
+    <div class="header-right">
+      <div class="user-badge" id="user-badge">…</div>
+      <button class="btn-logout" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="page-wrapper-wide" id="main-content" style="display:none;">
+    <div class="dashboard-grid">
+
+      <!-- ── Left: Record Homework ── -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📚 Record Homework</span>
+          </div>
+          <div class="card-body">
+            <div id="hw-alert" class="alert alert-error" style="display:none;"></div>
+
+            <form id="hw-form" onsubmit="saveHomework(event)">
+              <div class="form-group">
+                <label for="hw-student">Student</label>
+                <select id="hw-student" required>
+                  <option value="">— Select a student —</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="hw-date">Session Date</label>
+                <input id="hw-date" type="date" required>
+              </div>
+
+              <div class="form-group">
+                <label for="hw-label">Session Label</label>
+                <input id="hw-label" type="text" placeholder="e.g. Week 12 Session" maxlength="80">
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="hw-brought">Homework Brought?</label>
+                  <select id="hw-brought">
+                    <option value="">— Select —</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="hw-marked">Homework Marked?</label>
+                  <select id="hw-marked">
+                    <option value="">— Select —</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="hw-notes">Notes (optional)</label>
+                <textarea id="hw-notes" placeholder="Optional notes" maxlength="300"></textarea>
+              </div>
+
+              <button class="btn btn-primary btn-full" type="submit" id="hw-btn">
+                📚 Save Record
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Right: Homework Records ── -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📋 Homework Records</span>
+          </div>
+          <div class="card-body" style="padding-bottom:8px;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="hw-filter-student">Filter by student</label>
+              <select id="hw-filter-student" onchange="filterHomework()">
+                <option value="">All students</option>
+              </select>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="hw-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Student</th>
+                  <th>Session</th>
+                  <th>Brought</th>
+                  <th>Marked</th>
+                  <th>Notes</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="hw-body">
+                <tr>
+                  <td colspan="7" style="text-align:center;padding:40px;">
+                    <div class="spinner" style="margin:0 auto;"></div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/nav.js"></script>
+
+  <script>
+    let currentUser  = null;
+    let parentsList  = [];
+    let allRecords   = [];
+    let hwListener   = null;
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    (async () => {
+      try {
+        currentUser = await requireAuth('teacher');
+        renderHeaderUser(currentUser);
+        renderPortalNav('homework', 'teacher');
+        document.getElementById('main-content').style.display = 'block';
+
+        document.getElementById('hw-date').value = todayISO();
+
+        parentsList = await loadParentsList();
+        populateParentSelect('hw-student', parentsList);
+        populateFilterSelect();
+        subscribeHomework();
+      } catch {}
+    })();
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    function todayISO() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function populateFilterSelect() {
+      const sel = document.getElementById('hw-filter-student');
+      sel.innerHTML = '<option value="">All students</option>';
+      parentsList.forEach(p => {
+        const label = p.childName
+          ? `${p.displayName} — ${p.childName}`
+          : p.displayName;
+        sel.innerHTML += `<option value="${p.uid}">${escHtml(label)}</option>`;
+      });
+    }
+
+    // ── Save homework record ──────────────────────────────────────────────────
+    async function saveHomework(e) {
+      e.preventDefault();
+      clearAlert('hw-alert');
+
+      const studentId = document.getElementById('hw-student').value;
+      const dateVal   = document.getElementById('hw-date').value;
+      const label     = document.getElementById('hw-label').value.trim();
+      const brought   = document.getElementById('hw-brought').value;
+      const marked    = document.getElementById('hw-marked').value;
+      const notes     = document.getElementById('hw-notes').value.trim();
+
+      if (!studentId) {
+        setAlert('hw-alert', 'error', 'Please select a student.');
+        return;
+      }
+
+      const parent = parentsList.find(p => p.uid === studentId);
+      const studentName = parent
+        ? (parent.childName || parent.displayName)
+        : studentId;
+
+      const btn = document.getElementById('hw-btn');
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+
+      try {
+        await db.collection('homework').add({
+          teacherId:    currentUser.uid,
+          studentId,
+          studentName,
+          sessionDate:  firebase.firestore.Timestamp.fromDate(new Date(dateVal + 'T00:00:00')),
+          sessionLabel: label,
+          brought:      brought === 'yes',
+          marked:       marked  === 'yes',
+          notes,
+          createdAt:    firebase.firestore.FieldValue.serverTimestamp(),
+        });
+
+        document.getElementById('hw-form').reset();
+        document.getElementById('hw-date').value = todayISO();
+        showToast('Record saved', `Homework record for ${studentName} saved.`, '📚');
+      } catch (err) {
+        setAlert('hw-alert', 'error', 'Failed to save record. Please try again.');
+        console.error(err);
+      }
+
+      btn.disabled = false;
+      btn.textContent = '📚 Save Record';
+    }
+
+    // ── Subscribe to homework records ─────────────────────────────────────────
+    function subscribeHomework() {
+      if (hwListener) hwListener();
+
+      hwListener = db.collection('homework')
+        .where('teacherId', '==', currentUser.uid)
+        .orderBy('sessionDate', 'desc')
+        .onSnapshot(snap => {
+          allRecords = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          filterHomework();
+        }, err => console.error('Homework listener error:', err));
+    }
+
+    // ── Filter ────────────────────────────────────────────────────────────────
+    function filterHomework() {
+      const selectedId = document.getElementById('hw-filter-student').value;
+      const filtered = selectedId
+        ? allRecords.filter(r => r.studentId === selectedId)
+        : allRecords;
+      renderHomeworkTable(filtered);
+    }
+
+    // ── Render table ──────────────────────────────────────────────────────────
+    function renderHomeworkTable(records) {
+      const tbody = document.getElementById('hw-body');
+
+      if (!records.length) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7">
+              <div class="empty-state" style="padding:40px 24px;">
+                <div class="empty-icon">📚</div>
+                <h3>No homework records yet</h3>
+                <p>Use the form on the left to record your first session.</p>
+              </div>
+            </td>
+          </tr>`;
+        return;
+      }
+
+      tbody.innerHTML = records.map(r => `
+        <tr>
+          <td>${formatDate(r.sessionDate)}</td>
+          <td>${escHtml(r.studentName)}</td>
+          <td>${escHtml(r.sessionLabel || '—')}</td>
+          <td>${r.brought ? '<span class="tick">✅</span>' : '<span class="cross">❌</span>'}</td>
+          <td>${r.marked  ? '<span class="tick">✅</span>' : '<span class="cross">❌</span>'}</td>
+          <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.notes ? escHtml(r.notes) : '<span style="color:var(--text-light);">—</span>'}</td>
+          <td>
+            <button class="btn btn-danger btn-sm" onclick="deleteRecord('${r.id}')">Delete</button>
+          </td>
+        </tr>`).join('');
+    }
+
+    // ── Delete record ─────────────────────────────────────────────────────────
+    async function deleteRecord(id) {
+      if (!window.confirm('Delete this homework record?')) return;
+      try {
+        await db.collection('homework').doc(id).delete();
+        showToast('Deleted', 'Homework record removed.', '🗑️');
+      } catch (err) {
+        showToast('Error', 'Could not delete record. Please try again.', '❌');
+        console.error(err);
+      }
+    }
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    window.addEventListener('beforeunload', () => {
+      if (hwListener) hwListener();
+    });
+  </script>
+</body>
+</html>

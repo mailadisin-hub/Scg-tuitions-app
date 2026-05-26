@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — My Attendance</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+</head>
+<body>
+
+  <header class="app-header">
+    <a class="logo" href="#">
+      <div class="logo-icon">SCG</div>
+      <div class="logo-text">
+        <span class="logo-name">SCG Tuitions</span>
+        <span class="logo-tagline">Parent Portal</span>
+      </div>
+    </a>
+    <div class="header-right">
+      <div class="user-badge" id="user-badge">…</div>
+      <button class="btn-logout" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="page-wrapper" id="main-content" style="display:none;">
+
+    <!-- Stats row -->
+    <div class="stats-row" style="margin-bottom:24px;">
+      <div class="stat-card">
+        <div class="stat-icon green">📊</div>
+        <div class="stat-info">
+          <p>Attendance %</p>
+          <h3 id="stat-pct">—</h3>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon blue">✅</div>
+        <div class="stat-info">
+          <p>Sessions Present</p>
+          <h3 id="stat-present">—</h3>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon red">❌</div>
+        <div class="stat-info">
+          <p>Absences</p>
+          <h3 id="stat-absent">—</h3>
+        </div>
+      </div>
+    </div>
+
+    <!-- Attendance rate display -->
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-body" style="display:flex; align-items:center; gap:24px; flex-wrap:wrap;">
+        <div>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">Overall Attendance Rate</p>
+          <div class="attendance-pct-display" id="pct-display">—</div>
+        </div>
+        <div style="flex:1; min-width:200px;">
+          <div class="progress-bar-wrap" style="height:16px;">
+            <div class="progress-bar green" id="pct-bar" style="width:0%"></div>
+          </div>
+          <p id="pct-label" style="font-size:12px;color:var(--text-muted);margin-top:4px;">Loading…</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Session history -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📋 Session History</span>
+      </div>
+      <div id="session-list">
+        <div class="loader"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/nav.js"></script>
+
+  <script>
+    let currentUser   = null;
+    let attListener   = null;
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    (async () => {
+      try {
+        currentUser = await requireAuth('parent');
+        renderHeaderUser(currentUser);
+        renderPortalNav('attendance', 'parent');
+        document.getElementById('main-content').style.display = 'block';
+        loadAttendance();
+      } catch {}
+    })();
+
+    // ── Load attendance ───────────────────────────────────────────────────────
+    function loadAttendance() {
+      if (attListener) attListener();
+
+      attListener = db.collection('attendance')
+        .where('studentId', '==', currentUser.uid)
+        .orderBy('date', 'desc')
+        .onSnapshot(snap => {
+          const records = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          updateStats(records);
+          renderSessions(records);
+        }, err => console.error('Attendance listener error:', err));
+    }
+
+    // ── Update stats ──────────────────────────────────────────────────────────
+    function updateStats(records) {
+      const total   = records.length;
+      const present = records.filter(r => r.status === 'present').length;
+      const late    = records.filter(r => r.status === 'late').length;
+      const absent  = records.filter(r => r.status === 'absent').length;
+
+      const attended = present + late;
+      const pct      = total > 0 ? Math.round((attended / total) * 100) : 0;
+
+      // Stat cards
+      document.getElementById('stat-pct').textContent     = total > 0 ? pct + '%' : '—';
+      document.getElementById('stat-present').textContent = attended;
+      document.getElementById('stat-absent').textContent  = absent;
+
+      // Big display
+      const pctDisplay = document.getElementById('pct-display');
+      const pctBar     = document.getElementById('pct-bar');
+      const pctLabel   = document.getElementById('pct-label');
+
+      if (total === 0) {
+        pctDisplay.textContent = '—';
+        pctDisplay.className   = 'attendance-pct-display';
+        pctBar.style.width     = '0%';
+        pctBar.className       = 'progress-bar green';
+        pctLabel.textContent   = 'No sessions recorded yet';
+        return;
+      }
+
+      pctDisplay.textContent = pct + '%';
+      pctBar.style.width     = pct + '%';
+      pctLabel.textContent   = `${attended} out of ${total} sessions attended`;
+
+      let colorClass = 'green';
+      if (pct < 70)      colorClass = 'red';
+      else if (pct < 85) colorClass = 'amber';
+
+      pctDisplay.className = `attendance-pct-display ${colorClass}`;
+      pctBar.className     = `progress-bar ${colorClass}`;
+    }
+
+    // ── Render session list ───────────────────────────────────────────────────
+    function renderSessions(records) {
+      const list = document.getElementById('session-list');
+
+      if (!records.length) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📋</div>
+            <h3>No sessions recorded yet</h3>
+            <p>Your attendance history will appear here once your teacher adds records.</p>
+          </div>`;
+        return;
+      }
+
+      list.innerHTML = records.map(r => {
+        let indicator;
+        if (r.status === 'absent') {
+          indicator = '<div class="unread-indicator" style="background:var(--danger);"></div>';
+        } else if (r.status === 'late') {
+          indicator = '<div style="width:10px;height:10px;background:var(--warning);border-radius:50%;flex-shrink:0;margin-top:5px;"></div>';
+        } else {
+          indicator = '<div class="read-indicator"></div>';
+        }
+
+        let badgeClass = 'badge-success';
+        if (r.status === 'absent') badgeClass = 'badge-danger';
+        else if (r.status === 'late') badgeClass = 'badge-warning';
+
+        return `
+          <div class="message-item">
+            ${indicator}
+            <div class="message-info">
+              <div class="message-header">
+                <span class="message-from">${escHtml(r.sessionLabel || 'Session')}</span>
+                <span class="message-time">${formatDate(r.date)}</span>
+              </div>
+              <div class="message-preview">${r.notes ? escHtml(r.notes) : ''}</div>
+            </div>
+            <div class="message-meta">
+              <span class="badge ${badgeClass}">${escHtml(r.status)}</span>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    window.addEventListener('beforeunload', () => {
+      if (attListener) attListener();
+    });
+  </script>
+</body>
+</html>

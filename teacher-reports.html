@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — Assessments</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+</head>
+<body>
+
+  <header class="app-header">
+    <a class="logo" href="#">
+      <div class="logo-icon">SCG</div>
+      <div class="logo-text">
+        <span class="logo-name">SCG Tuitions</span>
+        <span class="logo-tagline">Teacher Portal</span>
+      </div>
+    </a>
+    <div class="header-right">
+      <div class="user-badge" id="user-badge">…</div>
+      <button class="btn-logout" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="page-wrapper-wide" id="main-content" style="display:none;">
+    <div class="dashboard-grid">
+
+      <!-- ── Left: Upload Assessment ── -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📊 Upload Assessment</span>
+          </div>
+          <div class="card-body">
+            <div id="assess-alert" class="alert alert-error" style="display:none;"></div>
+
+            <form id="assess-form" onsubmit="submitAssessment(event)">
+              <div class="form-group">
+                <label for="assess-student">Student</label>
+                <select id="assess-student" required>
+                  <option value="">— Select a student —</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="assess-name">Assessment Name</label>
+                <input id="assess-name" type="text" placeholder="e.g. Mock Exam 1 – November 2025" required maxlength="100">
+              </div>
+
+              <div class="form-group">
+                <label for="assess-date">Assessment Date</label>
+                <input id="assess-date" type="date" required>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="assess-score">Score</label>
+                  <input id="assess-score" type="number" min="0" max="9999" placeholder="Score">
+                </div>
+                <div class="form-group">
+                  <label for="assess-max">Out of</label>
+                  <input id="assess-max" type="number" min="1" max="9999" value="100" placeholder="Out of">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="assess-notes">Teacher Comments (optional)</label>
+                <textarea id="assess-notes" placeholder="Optional teacher comments" maxlength="500"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label for="assess-file">Attach paper/file (optional)</label>
+                <input id="assess-file" type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg">
+              </div>
+
+              <div id="upload-progress-wrap" style="display:none;">
+                <div class="upload-progress-wrap">
+                  <div class="upload-progress-bar" id="upload-bar" style="width:0%"></div>
+                </div>
+                <p id="upload-pct" style="font-size:12px;color:var(--text-muted);margin-top:4px;">Uploading…</p>
+              </div>
+
+              <button class="btn btn-primary btn-full" type="submit" id="assess-btn">
+                📊 Save Assessment
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Right: Assessment Records ── -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📋 Assessment Records</span>
+          </div>
+          <div class="card-body" style="padding-bottom:8px;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="assess-filter-student">Filter by student</label>
+              <select id="assess-filter-student" onchange="filterAssessments()">
+                <option value="">All students</option>
+              </select>
+            </div>
+          </div>
+          <div id="assess-list" style="padding:0 16px 16px;">
+            <div style="text-align:center;padding:40px;">
+              <div class="spinner" style="margin:0 auto;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/nav.js"></script>
+
+  <script>
+    let currentUser   = null;
+    let parentsList   = [];
+    let allAssessments = [];
+    let assessListener = null;
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    (async () => {
+      try {
+        currentUser = await requireAuth('teacher');
+        renderHeaderUser(currentUser);
+        renderPortalNav('reports', 'teacher');
+        document.getElementById('main-content').style.display = 'block';
+
+        document.getElementById('assess-date').value = todayISO();
+
+        parentsList = await loadParentsList();
+        populateParentSelect('assess-student', parentsList);
+        populateFilterSelect();
+        subscribeAssessments();
+      } catch {}
+    })();
+
+    function todayISO() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function populateFilterSelect() {
+      const sel = document.getElementById('assess-filter-student');
+      sel.innerHTML = '<option value="">All students</option>';
+      parentsList.forEach(p => {
+        const label = p.childName ? `${p.displayName} — ${p.childName}` : p.displayName;
+        sel.innerHTML += `<option value="${p.uid}">${escHtml(label)}</option>`;
+      });
+    }
+
+    // ── Submit assessment ─────────────────────────────────────────────────────
+    async function submitAssessment(e) {
+      e.preventDefault();
+      clearAlert('assess-alert');
+
+      const studentId  = document.getElementById('assess-student').value;
+      const name       = document.getElementById('assess-name').value.trim();
+      const dateVal    = document.getElementById('assess-date').value;
+      const scoreRaw   = document.getElementById('assess-score').value;
+      const maxRaw     = document.getElementById('assess-max').value;
+      const notes      = document.getElementById('assess-notes').value.trim();
+      const fileInput  = document.getElementById('assess-file');
+      const file       = fileInput.files[0] || null;
+
+      if (!studentId) { setAlert('assess-alert', 'error', 'Please select a student.'); return; }
+      if (!name)      { setAlert('assess-alert', 'error', 'Please enter an assessment name.'); return; }
+
+      const parent = parentsList.find(p => p.uid === studentId);
+      const studentName = parent ? (parent.childName || parent.displayName) : studentId;
+
+      const score    = scoreRaw !== '' ? parseFloat(scoreRaw) : null;
+      const maxScore = maxRaw   !== '' ? parseFloat(maxRaw)   : 100;
+      const percentage = (score !== null && maxScore > 0)
+        ? Math.round((score / maxScore) * 1000) / 10
+        : null;
+
+      const btn = document.getElementById('assess-btn');
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+
+      try {
+        // Add Firestore doc first to get an ID
+        const docRef = await db.collection('assessments').add({
+          teacherId:   currentUser.uid,
+          studentId,
+          studentName,
+          name,
+          date:        firebase.firestore.Timestamp.fromDate(new Date(dateVal + 'T00:00:00')),
+          score,
+          maxScore,
+          percentage,
+          notes:       notes || null,
+          fileUrl:     null,
+          fileName:    null,
+          createdAt:   firebase.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // If file attached, upload it
+        if (file) {
+          const docId = docRef.id;
+          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const storagePath = `assessments/${studentId}/${docId}_${safeName}`;
+
+          document.getElementById('upload-progress-wrap').style.display = 'block';
+
+          const uploadTask = storage.ref(storagePath).put(file);
+
+          await new Promise((resolve, reject) => {
+            uploadTask.on('state_changed',
+              snapshot => {
+                const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                document.getElementById('upload-bar').style.width = pct + '%';
+                document.getElementById('upload-pct').textContent = `Uploading… ${pct}%`;
+              },
+              err => reject(err),
+              async () => {
+                try {
+                  const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                  await docRef.update({ fileUrl: downloadURL, fileName: file.name, fileRef: storagePath });
+                  resolve();
+                } catch (err) {
+                  reject(err);
+                }
+              }
+            );
+          });
+
+          document.getElementById('upload-progress-wrap').style.display = 'none';
+          document.getElementById('upload-bar').style.width = '0%';
+        }
+
+        document.getElementById('assess-form').reset();
+        document.getElementById('assess-date').value = todayISO();
+        showToast('Assessment saved', `Assessment record for ${studentName} saved.`, '📊');
+      } catch (err) {
+        setAlert('assess-alert', 'error', 'Failed to save assessment. Please try again.');
+        document.getElementById('upload-progress-wrap').style.display = 'none';
+        console.error(err);
+      }
+
+      btn.disabled = false;
+      btn.textContent = '📊 Save Assessment';
+    }
+
+    // ── Subscribe to assessments ──────────────────────────────────────────────
+    function subscribeAssessments() {
+      if (assessListener) assessListener();
+
+      assessListener = db.collection('assessments')
+        .where('teacherId', '==', currentUser.uid)
+        .orderBy('date', 'desc')
+        .onSnapshot(snap => {
+          allAssessments = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          filterAssessments();
+        }, err => console.error('Assessments listener error:', err));
+    }
+
+    function filterAssessments() {
+      const selectedId = document.getElementById('assess-filter-student').value;
+      const filtered = selectedId
+        ? allAssessments.filter(r => r.studentId === selectedId)
+        : allAssessments;
+      renderAssessments(filtered);
+    }
+
+    // ── Render assessments ────────────────────────────────────────────────────
+    function renderAssessments(records) {
+      const list = document.getElementById('assess-list');
+
+      if (!records.length) {
+        list.innerHTML = `
+          <div class="empty-state" style="padding:40px 24px;">
+            <div class="empty-icon">📊</div>
+            <h3>No assessment records yet</h3>
+            <p>Use the form on the left to record your first assessment.</p>
+          </div>`;
+        return;
+      }
+
+      list.innerHTML = records.map(r => {
+        const pct = r.percentage;
+        let badgeClass = 'badge-warning';
+        if (pct !== null) {
+          if (pct >= 70)      badgeClass = 'badge-success';
+          else if (pct < 50)  badgeClass = 'badge-danger';
+        }
+        const scoreDisplay = (r.score !== null && r.score !== undefined)
+          ? `${r.score} / ${r.maxScore}` + (pct !== null ? ` (${pct}%)` : '')
+          : '—';
+
+        return `
+          <div class="sent-message-item" style="padding:12px;border-radius:10px;border:1px solid #dbeafe;margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;">
+              <div>
+                <strong>${escHtml(r.studentName || '—')}</strong>
+                <span style="color:var(--text-muted);font-size:13px;margin-left:6px;">${escHtml(r.name || '—')}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span style="font-size:14px;font-weight:600;">${escHtml(scoreDisplay)}</span>
+                ${pct !== null ? `<span class="badge ${badgeClass}">${pct}%</span>` : ''}
+              </div>
+            </div>
+            <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">
+              ${r.date ? formatDate(r.date) : '—'}
+              ${r.notes ? ' · ' + escHtml(r.notes.slice(0, 80)) + (r.notes.length > 80 ? '…' : '') : ''}
+            </div>
+            <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+              ${r.fileUrl ? `<a class="btn btn-secondary btn-sm" href="${escHtml(r.fileUrl)}" target="_blank" rel="noopener">View PDF</a>` : ''}
+              <button class="btn btn-danger btn-sm" onclick="deleteAssessment('${r.id}', ${r.fileRef ? `'${escHtml(r.fileRef)}'` : 'null'})">Delete</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // ── Delete assessment ─────────────────────────────────────────────────────
+    async function deleteAssessment(id, fileRef) {
+      if (!window.confirm('Delete this assessment record?')) return;
+      try {
+        if (fileRef) {
+          try { await storage.ref(fileRef).delete(); } catch (e) { console.warn('Could not delete file:', e); }
+        }
+        await db.collection('assessments').doc(id).delete();
+        showToast('Deleted', 'Assessment record removed.', '🗑️');
+      } catch (err) {
+        showToast('Error', 'Could not delete record. Please try again.', '❌');
+        console.error(err);
+      }
+    }
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    window.addEventListener('beforeunload', () => {
+      if (assessListener) assessListener();
+    });
+  </script>
+</body>
+</html>

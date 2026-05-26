@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — Messages</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+</head>
+<body>
+
+<header class="app-header">
+  <a class="logo" href="#">
+    <div class="logo-icon">SCG</div>
+    <div class="logo-text">
+      <span class="logo-name">SCG Tuitions</span>
+      <span class="logo-tagline">Parent Portal</span>
+    </div>
+  </a>
+  <div class="header-right">
+    <div class="user-badge" id="user-badge">…</div>
+    <button class="btn-logout" onclick="signOut()">Sign Out</button>
+  </div>
+</header>
+
+<div id="main-content" style="display:none;">
+  <div class="chat-layout" id="chat-layout">
+
+    <!-- ── Sidebar: conversation list ── -->
+    <aside class="chat-sidebar">
+      <div class="chat-sidebar-header">
+        <span class="chat-sidebar-title">💬 Messages</span>
+        <span id="unread-total-badge"></span>
+      </div>
+      <div id="convo-list">
+        <div class="loader"><div class="spinner"></div></div>
+      </div>
+    </aside>
+
+    <!-- ── Main chat window ── -->
+    <div class="chat-window" id="chat-window">
+
+      <!-- No conversation selected -->
+      <div class="chat-empty" id="chat-empty">
+        <div class="empty-icon">💬</div>
+        <h3>Your Messages</h3>
+        <p>Select a conversation on the left to read messages from your child's teachers.</p>
+      </div>
+
+      <!-- Active conversation -->
+      <div id="active-chat" style="display:none; height:100%; flex-direction:column; display:none;">
+        <div class="chat-window-header">
+          <button class="btn-logout chat-back-btn" onclick="closeChat()" style="margin-right:4px;">← Back</button>
+          <div class="chat-partner-avatar" id="partner-avatar">?</div>
+          <div class="chat-partner-info">
+            <h3 id="partner-name">Teacher</h3>
+            <p id="partner-role">SCG Tuitions Teacher</p>
+          </div>
+        </div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-bar">
+          <textarea class="chat-input" id="reply-input" placeholder="Type a reply…" rows="1"
+            onkeydown="handleInputKey(event)"></textarea>
+          <button class="chat-send-btn" onclick="sendReply()" title="Send">&#9658;</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/notifications.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/nav.js"></script>
+
+<script>
+  let currentUser      = null;
+  let activeConvoId    = null;
+  let msgsListener     = null;
+  let convosListener   = null;
+  let allConvos        = [];
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
+  (async () => {
+    try {
+      currentUser = await requireAuth('parent');
+      renderHeaderUser(currentUser);
+      renderPortalNav('messages', 'parent');
+      document.getElementById('main-content').style.display = 'block';
+      subscribeToConversations();
+      registerServiceWorker();
+    } catch {}
+  })();
+
+  function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(() => {});
+    }
+  }
+
+  // ── Real-time conversations listener ──────────────────────────────────────
+  function subscribeToConversations() {
+    if (convosListener) convosListener();
+    convosListener = db.collection('conversations')
+      .where('parentId', '==', currentUser.uid)
+      .orderBy('lastMessageAt', 'desc')
+      .onSnapshot(snap => {
+        allConvos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderConvoList(allConvos);
+        handleUnreadNotifications(allConvos);
+      }, err => console.error(err));
+  }
+
+  // ── Render sidebar conversation list ─────────────────────────────────────
+  function renderConvoList(convos) {
+    const list = document.getElementById('convo-list');
+    const totalUnread = convos.reduce((s, c) => s + (c.parentUnread || 0), 0);
+    document.getElementById('unread-total-badge').innerHTML =
+      totalUnread > 0 ? `<span class="badge badge-danger">${totalUnread}</span>` : '';
+
+    if (!convos.length) {
+      list.innerHTML = `<div class="empty-state" style="padding:40px 20px;">
+        <div class="empty-icon">📭</div>
+        <h3 style="font-size:15px;">No messages yet</h3>
+        <p>Your child's teachers will send messages here.</p>
+      </div>`;
+      return;
+    }
+
+    list.innerHTML = convos.map(c => {
+      const unread  = c.parentUnread || 0;
+      const initials = getInitials(c.teacherName);
+      const timeStr  = c.lastMessageAt ? formatTime(c.lastMessageAt) : '';
+      const preview  = c.lastMessage ? escHtml(c.lastMessage.slice(0, 60)) : 'No messages yet';
+      const isActive = c.id === activeConvoId;
+      return `
+        <div class="convo-item${unread > 0 ? ' has-unread' : ''}${isActive ? ' active' : ''}"
+             onclick="openConvo('${c.id}')">
+          <div class="convo-avatar">${initials}</div>
+          <div class="convo-info">
+            <div class="convo-name">${escHtml(c.teacherName)}</div>
+            <div class="convo-preview">${preview}</div>
+          </div>
+          <div class="convo-meta">
+            <span class="convo-time">${timeStr}</span>
+            ${unread > 0 ? `<span class="badge badge-danger">${unread}</span>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // ── Open a conversation ────────────────────────────────────────────────────
+  function openConvo(convoId) {
+    activeConvoId = convoId;
+    const convo = allConvos.find(c => c.id === convoId);
+    if (!convo) return;
+
+    // Update header
+    document.getElementById('partner-avatar').textContent = getInitials(convo.teacherName);
+    document.getElementById('partner-name').textContent   = convo.teacherName;
+    document.getElementById('partner-role').textContent   = 'SCG Tuitions Teacher';
+
+    // Show chat pane
+    document.getElementById('chat-empty').style.display  = 'none';
+    const activeChat = document.getElementById('active-chat');
+    activeChat.style.display = 'flex';
+
+    // Mobile: show chat window
+    document.getElementById('chat-layout').classList.add('chat-open');
+
+    // Re-render sidebar to update active highlight
+    renderConvoList(allConvos);
+
+    // Load messages
+    if (msgsListener) msgsListener();
+    document.getElementById('chat-messages').innerHTML = '<div class="loader"><div class="spinner"></div></div>';
+
+    msgsListener = db.collection('conversations').doc(convoId)
+      .collection('messages')
+      .orderBy('sentAt', 'asc')
+      .onSnapshot(snap => {
+        const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderMessages(msgs);
+        // Mark as read
+        if (convo.parentUnread > 0) {
+          db.collection('conversations').doc(convoId).update({ parentUnread: 0 });
+        }
+        stopMessageNotifications(convoId);
+      });
+  }
+
+  function closeChat() {
+    document.getElementById('chat-layout').classList.remove('chat-open');
+    activeConvoId = null;
+    if (msgsListener) { msgsListener(); msgsListener = null; }
+    renderConvoList(allConvos);
+  }
+
+  // ── Render messages ────────────────────────────────────────────────────────
+  function renderMessages(msgs) {
+    const container = document.getElementById('chat-messages');
+    if (!msgs.length) {
+      container.innerHTML = `<div class="chat-empty" style="flex:1;"><div class="empty-icon">💬</div><p>No messages yet. Your teacher will write first.</p></div>`;
+      return;
+    }
+
+    let html = '';
+    let lastDate = '';
+
+    msgs.forEach(msg => {
+      const isMine = msg.senderId === currentUser.uid;
+      const d = msg.sentAt ? msg.sentAt.toDate() : new Date();
+      const dateStr = d.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long' });
+      const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      const initials = getInitials(msg.senderName);
+
+      if (dateStr !== lastDate) {
+        html += `<div class="msg-day-divider"><span>${dateStr}</span></div>`;
+        lastDate = dateStr;
+      }
+
+      html += `
+        <div class="msg-bubble-wrap ${isMine ? 'mine' : 'theirs'}">
+          ${!isMine ? `<div class="msg-avatar-sm">${initials}</div>` : ''}
+          <div class="msg-bubble-col">
+            <div class="msg-bubble ${isMine ? 'mine' : 'theirs'}">${escHtml(msg.content)}</div>
+            <div class="msg-time">${timeStr}</div>
+          </div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+    container.scrollTop = container.scrollHeight;
+  }
+
+  // ── Send a reply ───────────────────────────────────────────────────────────
+  async function sendReply() {
+    if (!activeConvoId) return;
+    const input   = document.getElementById('reply-input');
+    const content = input.value.trim();
+    if (!content) return;
+
+    input.value   = '';
+    input.style.height = '';
+
+    const now = firebase.firestore.FieldValue.serverTimestamp();
+    try {
+      await db.collection('conversations').doc(activeConvoId)
+        .collection('messages').add({
+          senderId:   currentUser.uid,
+          senderName: currentUser.displayName,
+          senderRole: 'parent',
+          content,
+          sentAt:  now,
+          readAt:  null,
+        });
+      // Update conversation preview
+      await db.collection('conversations').doc(activeConvoId).update({
+        lastMessage:   content,
+        lastMessageAt: now,
+        lastSenderId:  currentUser.uid,
+        teacherUnread: firebase.firestore.FieldValue.increment(1),
+      });
+    } catch (err) {
+      showToast('Error', 'Could not send message. Please try again.', '❌');
+    }
+  }
+
+  function handleInputKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendReply();
+    }
+    // Auto-resize textarea
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }
+
+  // ── Hourly notifications for unread conversations ──────────────────────────
+  function handleUnreadNotifications(convos) {
+    convos.forEach(c => {
+      if ((c.parentUnread || 0) > 0 && c.id !== activeConvoId) {
+        startMessageNotifications(c.id, c.teacherName, 'Unread message');
+      } else {
+        stopMessageNotifications(c.id);
+      }
+    });
+  }
+
+  window.addEventListener('beforeunload', () => {
+    if (convosListener) convosListener();
+    if (msgsListener)   msgsListener();
+  });
+</script>
+</body>
+</html>
