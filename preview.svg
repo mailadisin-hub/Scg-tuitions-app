@@ -1,0 +1,267 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" font-family="Arial,sans-serif">
+
+  <!-- Background -->
+  <rect width="900" height="600" fill="#e8eaf0"/>
+  <text x="450" y="30" text-anchor="middle" font-size="13" fill="#64748b" font-weight="600">SCG Tuitions — App Preview (New Brand Colours)</text>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- SCREEN 1: Login Page -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+
+  <!-- Phone frame -->
+  <rect x="30" y="50" width="240" height="500" rx="24" fill="#1a1a2e" stroke="#333" stroke-width="3"/>
+  <rect x="38" y="58" width="224" height="484" rx="18" fill="#141d57"/>
+  <!-- Login gradient overlay -->
+  <defs>
+    <linearGradient id="loginGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#141d57"/>
+      <stop offset="50%" stop-color="#1e2d7d"/>
+      <stop offset="100%" stop-color="#2840a8"/>
+    </linearGradient>
+    <linearGradient id="navGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#1e2d7d"/>
+      <stop offset="100%" stop-color="#2840a8"/>
+    </linearGradient>
+  </defs>
+  <rect x="38" y="58" width="224" height="484" rx="18" fill="url(#loginGrad)"/>
+
+  <!-- Login Card -->
+  <rect x="54" y="110" width="192" height="370" rx="16" fill="white" opacity="0.97"/>
+
+  <!-- SCG Logo icon -->
+  <rect x="122" y="126" width="56" height="56" rx="12" fill="#39b54a"/>
+  <text x="150" y="143" text-anchor="middle" font-size="11" font-weight="900" fill="white">SCG</text>
+  <text x="150" y="156" text-anchor="middle" font-size="7" font-weight="700" fill="white">Tuitions</text>
+
+  <!-- Login Title -->
+  <text x="150" y="198" text-anchor="middle" font-size="12" font-weight="700" fill="#141d57">SCG Tuitions</text>
+  <text x="150" y="211" text-anchor="middle" font-size="8" fill="#64748b">Personalised Learning for Every Child</text>
+
+  <!-- Tabs -->
+  <rect x="64" y="220" width="172" height="26" rx="6" fill="#f4f6ff"/>
+  <rect x="66" y="222" width="82" height="22" rx="5" fill="white"/>
+  <text x="107" y="237" text-anchor="middle" font-size="9" font-weight="700" fill="#1e2d7d">Sign In</text>
+  <text x="193" y="237" text-anchor="middle" font-size="9" fill="#94a3b8">Register</text>
+
+  <!-- Form fields -->
+  <text x="68" y="260" font-size="8" font-weight="600" fill="#1e293b">Email address</text>
+  <rect x="64" y="264" width="172" height="20" rx="6" fill="white" stroke="#d0d8f5" stroke-width="1.5"/>
+  <text x="72" y="278" font-size="8" fill="#94a3b8">you@example.com</text>
+
+  <text x="68" y="296" font-size="8" font-weight="600" fill="#1e293b">Password</text>
+  <rect x="64" y="300" width="172" height="20" rx="6" fill="white" stroke="#d0d8f5" stroke-width="1.5"/>
+  <text x="72" y="314" font-size="8" fill="#94a3b8">••••••••</text>
+
+  <!-- Sign in button -->
+  <rect x="64" y="332" width="172" height="28" rx="7" fill="#39b54a"/>
+  <text x="150" y="350" text-anchor="middle" font-size="10" font-weight="700" fill="white">Sign In</text>
+
+  <!-- Forgot password -->
+  <text x="150" y="372" text-anchor="middle" font-size="8" fill="#2840a8">Forgot password?</text>
+
+  <!-- Label -->
+  <text x="150" y="550" text-anchor="middle" font-size="10" font-weight="600" fill="white">Login Screen</text>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- SCREEN 2: Parent Chat -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+
+  <!-- Phone frame -->
+  <rect x="330" y="50" width="240" height="500" rx="24" fill="#1a1a2e" stroke="#333" stroke-width="3"/>
+  <rect x="338" y="58" width="224" height="484" rx="18" fill="#f4f6ff"/>
+
+  <!-- Header -->
+  <rect x="338" y="58" width="224" height="40" rx="0" fill="#141d57"/>
+  <rect x="338" y="58" width="224" height="40" rx="18" fill="#141d57"/>
+  <rect x="338" y="78" width="224" height="20" fill="#141d57"/>
+
+  <!-- Logo in header -->
+  <rect x="348" y="66" width="28" height="28" rx="6" fill="#39b54a"/>
+  <text x="362" y="77" text-anchor="middle" font-size="7" font-weight="900" fill="white">SCG</text>
+  <text x="362" y="86" text-anchor="middle" font-size="5" font-weight="700" fill="white">Tuitions</text>
+
+  <text x="384" y="76" font-size="9" font-weight="700" fill="white">SCG Tuitions</text>
+  <text x="384" y="87" font-size="7" fill="rgba(255,255,255,0.6)">Parent Portal</text>
+
+  <!-- User badge -->
+  <rect x="490" y="67" width="60" height="22" rx="11" fill="rgba(255,255,255,0.12)"/>
+  <circle cx="502" cy="78" r="7" fill="#39b54a"/>
+  <text x="502" y="81" text-anchor="middle" font-size="6" font-weight="700" fill="white">JS</text>
+  <text x="518" y="81" font-size="7" fill="white">Jane</text>
+
+  <!-- Nav bar -->
+  <rect x="338" y="98" width="224" height="28" fill="#1e2d7d"/>
+  <text x="354" y="116" font-size="7" fill="rgba(255,255,255,0.7)">💬</text>
+  <text x="362" y="116" font-size="7" font-weight="600" fill="white">Messages</text>
+  <rect x="358" y="124" width="46" height="2" rx="1" fill="#39b54a"/>
+
+  <text x="415" y="116" font-size="7" fill="rgba(255,255,255,0.6)">📋 Attend</text>
+  <text x="466" y="116" font-size="7" fill="rgba(255,255,255,0.6)">📚</text>
+  <text x="474" y="116" font-size="7" fill="rgba(255,255,255,0.6)">HW</text>
+  <text x="497" y="116" font-size="7" fill="rgba(255,255,255,0.6)">💳</text>
+  <text x="505" y="116" font-size="7" fill="rgba(255,255,255,0.6)">Pay</text>
+  <text x="527" y="116" font-size="7" fill="rgba(255,255,255,0.6)">📊</text>
+  <text x="536" y="116" font-size="7" fill="rgba(255,255,255,0.6)">+</text>
+
+  <!-- Chat sidebar -->
+  <rect x="338" y="126" width="80" height="400" fill="white" stroke="#d0d8f5" stroke-width="0.5"/>
+  <text x="348" y="140" font-size="8" font-weight="700" fill="#141d57">Chats</text>
+
+  <!-- Convo item 1 (active) -->
+  <rect x="338" y="146" width="80" height="46" fill="#dde3ff"/>
+  <rect x="415" y="146" width="3" height="46" fill="#1e2d7d"/>
+  <circle cx="354" cy="169" r="12" fill="#1e2d7d"/>
+  <text x="354" y="173" text-anchor="middle" font-size="7" font-weight="700" fill="white">MC</text>
+  <text x="371" y="160" font-size="7" font-weight="700" fill="#1e293b">Ms Clarke</text>
+  <text x="371" y="170" font-size="6" fill="#64748b">Great work Oliver!</text>
+  <text x="371" y="182" font-size="6" fill="#94a3b8">2m ago</text>
+
+  <!-- Convo item 2 -->
+  <rect x="338" y="192" width="80" height="46" fill="white"/>
+  <circle cx="354" cy="215" r="12" fill="#2840a8"/>
+  <text x="354" y="219" text-anchor="middle" font-size="7" font-weight="700" fill="white">MO</text>
+  <text x="371" y="206" font-size="7" font-weight="700" fill="#1e293b">Mr Osei</text>
+  <text x="371" y="216" font-size="6" fill="#64748b">Homework due...</text>
+  <text x="371" y="228" font-size="6" fill="#94a3b8">Yesterday</text>
+  <!-- Unread badge -->
+  <circle cx="408" cy="207" r="7" fill="#dc2626"/>
+  <text x="408" y="210" text-anchor="middle" font-size="6" font-weight="700" fill="white">2</text>
+
+  <!-- Chat window -->
+  <rect x="418" y="126" width="144" height="400" fill="#f0f2ff"/>
+
+  <!-- Chat header -->
+  <rect x="418" y="126" width="144" height="32" fill="white" stroke="#d0d8f5" stroke-width="0.5"/>
+  <circle cx="432" cy="142" r="10" fill="#1e2d7d"/>
+  <text x="432" y="146" text-anchor="middle" font-size="6" font-weight="700" fill="white">MC</text>
+  <text x="446" y="138" font-size="8" font-weight="700" fill="#141d57">Ms Clarke</text>
+  <text x="446" y="148" font-size="6" fill="#64748b">Teacher</text>
+
+  <!-- Their message bubble -->
+  <rect x="424" y="168" width="88" height="36" rx="12" fill="white"/>
+  <rect x="424" y="192" width="12" height="12" rx="2" fill="white"/>
+  <text x="430" y="181" font-size="7" fill="#1e293b">Oliver did brilliantly</text>
+  <text x="430" y="191" font-size="7" fill="#1e293b">in today's session!</text>
+  <text x="430" y="203" font-size="6" fill="#94a3b8">10:24 AM</text>
+
+  <!-- My message bubble -->
+  <rect x="480" y="214" width="72" height="28" rx="12" fill="#1e2d7d"/>
+  <rect x="540" y="232" width="12" height="12" rx="2" fill="#1e2d7d"/>
+  <text x="487" y="225" font-size="7" fill="white">Thank you so</text>
+  <text x="487" y="235" font-size="7" fill="white">much! 😊</text>
+  <text x="536" y="248" text-anchor="end" font-size="6" fill="rgba(30,45,125,0.5)">10:26</text>
+
+  <!-- Their message 2 -->
+  <rect x="424" y="258" width="96" height="28" rx="12" fill="white"/>
+  <text x="430" y="269" font-size="7" fill="#1e293b">Homework for next</text>
+  <text x="430" y="279" font-size="7" fill="#1e293b">week: pages 12-15</text>
+  <text x="430" y="291" font-size="6" fill="#94a3b8">10:28 AM</text>
+
+  <!-- Chat input -->
+  <rect x="418" y="480" width="144" height="46" fill="white" stroke="#d0d8f5" stroke-width="0.5"/>
+  <rect x="424" y="490" width="96" height="28" rx="14" fill="white" stroke="#d0d8f5" stroke-width="1.5"/>
+  <text x="432" y="508" font-size="7" fill="#94a3b8">Type a message...</text>
+  <circle cx="540" cy="504" r="12" fill="#39b54a"/>
+  <text x="540" y="508" text-anchor="middle" font-size="11" fill="white">➤</text>
+
+  <!-- Label -->
+  <text x="450" y="550" text-anchor="middle" font-size="10" font-weight="600" fill="#333">Chat Screen</text>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- SCREEN 3: Attendance -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+
+  <!-- Phone frame -->
+  <rect x="630" y="50" width="240" height="500" rx="24" fill="#1a1a2e" stroke="#333" stroke-width="3"/>
+  <rect x="638" y="58" width="224" height="484" rx="18" fill="#f4f6ff"/>
+
+  <!-- Header -->
+  <rect x="638" y="58" width="224" height="40" rx="18" fill="#141d57"/>
+  <rect x="638" y="78" width="224" height="20" fill="#141d57"/>
+  <rect x="648" y="66" width="28" height="28" rx="6" fill="#39b54a"/>
+  <text x="662" y="77" text-anchor="middle" font-size="7" font-weight="900" fill="white">SCG</text>
+  <text x="662" y="86" text-anchor="middle" font-size="5" font-weight="700" fill="white">Tuitions</text>
+  <text x="684" y="80" font-size="9" font-weight="700" fill="white">Attendance</text>
+
+  <!-- Nav bar -->
+  <rect x="638" y="98" width="224" height="28" fill="#1e2d7d"/>
+  <text x="648" y="116" font-size="7" fill="rgba(255,255,255,0.6)">💬</text>
+  <text x="660" y="116" font-size="7" fill="rgba(255,255,255,0.7)">📋</text>
+  <text x="668" y="116" font-size="7" font-weight="600" fill="white">Attend</text>
+  <rect x="660" y="124" width="42" height="2" rx="1" fill="#39b54a"/>
+  <text x="715" y="116" font-size="7" fill="rgba(255,255,255,0.6)">📚 HW</text>
+  <text x="750" y="116" font-size="7" fill="rgba(255,255,255,0.6)">💳 Pay</text>
+  <text x="785" y="116" font-size="7" fill="rgba(255,255,255,0.6)">📊</text>
+
+  <!-- Stats cards -->
+  <rect x="644" y="132" width="50" height="50" rx="8" fill="white" stroke="#d0d8f5" stroke-width="1"/>
+  <text x="669" y="150" text-anchor="middle" font-size="7" fill="#64748b">Attended</text>
+  <text x="669" y="166" text-anchor="middle" font-size="14" font-weight="800" fill="#141d57">18</text>
+  <text x="669" y="175" text-anchor="middle" font-size="6" fill="#64748b">sessions</text>
+
+  <rect x="700" y="132" width="50" height="50" rx="8" fill="white" stroke="#d0d8f5" stroke-width="1"/>
+  <text x="725" y="150" text-anchor="middle" font-size="7" fill="#64748b">Attendance</text>
+  <text x="725" y="166" text-anchor="middle" font-size="14" font-weight="800" fill="#39b54a">90%</text>
+  <text x="725" y="175" text-anchor="middle" font-size="6" fill="#64748b">rate</text>
+
+  <rect x="756" y="132" width="50" height="50" rx="8" fill="white" stroke="#d0d8f5" stroke-width="1"/>
+  <text x="781" y="150" text-anchor="middle" font-size="7" fill="#64748b">Total</text>
+  <text x="781" y="166" text-anchor="middle" font-size="14" font-weight="800" fill="#141d57">20</text>
+  <text x="781" y="175" text-anchor="middle" font-size="6" fill="#64748b">sessions</text>
+
+  <!-- Progress bar card -->
+  <rect x="644" y="190" width="210" height="60" rx="8" fill="white" stroke="#d0d8f5" stroke-width="1"/>
+  <text x="654" y="204" font-size="8" font-weight="600" fill="#141d57">Attendance Rate</text>
+  <text x="844" y="204" text-anchor="end" font-size="16" font-weight="800" fill="#39b54a">90%</text>
+  <rect x="654" y="210" width="190" height="8" rx="4" fill="#d0d8f5"/>
+  <rect x="654" y="210" width="171" height="8" rx="4" fill="#39b54a"/>
+  <text x="654" y="234" font-size="7" fill="#64748b">Excellent attendance — keep it up!</text>
+  <text x="844" y="234" text-anchor="end" font-size="7" fill="#39b54a">● Great</text>
+
+  <!-- Session list -->
+  <rect x="644" y="258" width="210" height="230" rx="8" fill="white" stroke="#d0d8f5" stroke-width="1"/>
+  <text x="654" y="272" font-size="8" font-weight="700" fill="#141d57">Session History</text>
+
+  <!-- Session rows -->
+  <line x1="644" y1="278" x2="854" y2="278" stroke="#d0d8f5" stroke-width="0.5"/>
+  <text x="654" y="291" font-size="7" font-weight="600" fill="#1e293b">14 Jun 2026</text>
+  <text x="654" y="300" font-size="7" fill="#64748b">Week 38</text>
+  <rect x="800" y="283" width="44" height="14" rx="7" fill="#dcfce7"/>
+  <text x="822" y="293" text-anchor="middle" font-size="6" font-weight="700" fill="#39b54a">Present</text>
+
+  <line x1="644" y1="302" x2="854" y2="302" stroke="#d0d8f5" stroke-width="0.5"/>
+  <text x="654" y="315" font-size="7" font-weight="600" fill="#1e293b">7 Jun 2026</text>
+  <text x="654" y="324" font-size="7" fill="#64748b">Week 37</text>
+  <rect x="800" y="307" width="44" height="14" rx="7" fill="#dcfce7"/>
+  <text x="822" y="317" text-anchor="middle" font-size="6" font-weight="700" fill="#39b54a">Present</text>
+
+  <line x1="644" y1="326" x2="854" y2="326" stroke="#d0d8f5" stroke-width="0.5"/>
+  <text x="654" y="339" font-size="7" font-weight="600" fill="#1e293b">31 May 2026</text>
+  <text x="654" y="348" font-size="7" fill="#64748b">Week 36</text>
+  <rect x="800" y="331" width="36" height="14" rx="7" fill="#fef9c3"/>
+  <text x="818" y="341" text-anchor="middle" font-size="6" font-weight="700" fill="#f7941d">Late</text>
+
+  <line x1="644" y1="350" x2="854" y2="350" stroke="#d0d8f5" stroke-width="0.5"/>
+  <text x="654" y="363" font-size="7" font-weight="600" fill="#1e293b">24 May 2026</text>
+  <text x="654" y="372" font-size="7" fill="#64748b">Week 35</text>
+  <rect x="800" y="355" width="44" height="14" rx="7" fill="#dcfce7"/>
+  <text x="822" y="365" text-anchor="middle" font-size="6" font-weight="700" fill="#39b54a">Present</text>
+
+  <!-- Label -->
+  <text x="750" y="550" text-anchor="middle" font-size="10" font-weight="600" fill="#333">Attendance Screen</text>
+
+  <!-- Colour swatches at bottom -->
+  <rect x="50" y="570" width="16" height="16" rx="4" fill="#141d57"/>
+  <text x="72" y="582" font-size="9" fill="#333">Header #141d57</text>
+  <rect x="200" y="570" width="16" height="16" rx="4" fill="#1e2d7d"/>
+  <text x="222" y="582" font-size="9" fill="#333">Navy #1e2d7d</text>
+  <rect x="340" y="570" width="16" height="16" rx="4" fill="#39b54a"/>
+  <text x="362" y="582" font-size="9" fill="#333">Green #39b54a</text>
+  <rect x="480" y="570" width="16" height="16" rx="4" fill="#f7941d"/>
+  <text x="502" y="582" font-size="9" fill="#333">Orange #f7941d</text>
+  <rect x="620" y="570" width="16" height="16" rx="4" fill="#f4f6ff" stroke="#d0d8f5" stroke-width="1"/>
+  <text x="642" y="582" font-size="9" fill="#333">BG #f4f6ff</text>
+  <rect x="740" y="570" width="16" height="16" rx="4" fill="#2840a8"/>
+  <text x="762" y="582" font-size="9" fill="#333">Light navy #2840a8</text>
+
+</svg>
