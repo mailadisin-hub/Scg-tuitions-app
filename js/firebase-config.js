@@ -1,14 +1,12 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// FILL IN YOUR FIREBASE PROJECT CONFIG BELOW
-// Go to: Firebase Console → Project Settings → General → Your apps → Web app
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── SCG Tuitions — Firebase Configuration ───────────────────────────────────
 const firebaseConfig = {
-  apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId:         "YOUR_PROJECT_ID",
-  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId:             "YOUR_APP_ID"
+  apiKey:            "AIzaSyB1DQ7netegwoxIflP79uzyxWpoDUGvylQ",
+  authDomain:        "scg-tuitions.firebaseapp.com",
+  projectId:         "scg-tuitions",
+  storageBucket:     "scg-tuitions.firebasestorage.app",
+  messagingSenderId: "998205532847",
+  appId:             "1:998205532847:web:f4fb5eaac1e9a4c1e6825a",
+  measurementId:     "G-HEM997VNEG"
 };
 
 // VAPID key for web push notifications

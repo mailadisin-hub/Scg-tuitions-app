@@ -4,14 +4,13 @@
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
 
-// ─── IMPORTANT: paste your Firebase config here too ──────────────────────────
 firebase.initializeApp({
-  apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId:         "YOUR_PROJECT_ID",
-  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId:             "YOUR_APP_ID"
+  apiKey:            "AIzaSyB1DQ7netegwoxIflP79uzyxWpoDUGvylQ",
+  authDomain:        "scg-tuitions.firebaseapp.com",
+  projectId:         "scg-tuitions",
+  storageBucket:     "scg-tuitions.firebasestorage.app",
+  messagingSenderId: "998205532847",
+  appId:             "1:998205532847:web:f4fb5eaac1e9a4c1e6825a"
 });
 
 const messaging = firebase.messaging();
@@ -39,9 +38,9 @@ self.addEventListener('notificationclick', event => {
   event.notification.close();
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(wins => {
-      const existing = wins.find(w => w.url.includes('parent-dashboard.html'));
+      const existing = wins.find(w => w.url.includes('parent-chat.html'));
       if (existing) return existing.focus();
-      return clients.openWindow('/parent-dashboard.html');
+      return clients.openWindow('/parent-chat.html');
     })
   );
 });
