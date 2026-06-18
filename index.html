@@ -4,8 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SCG Tuitions — Parent Portal</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=8">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#141d57">
 </head>
 <body>
   <div class="login-page">
@@ -37,6 +39,12 @@
           <input id="login-password" type="password" placeholder="••••••••" required autocomplete="current-password">
         </div>
         <button class="btn btn-primary" type="submit" id="login-btn">Sign In</button>
+        <p style="text-align:center;margin-top:14px;">
+          <a href="#" onclick="handleForgotPassword(event)"
+             style="font-size:13px;color:var(--primary);text-decoration:none;">
+            Forgot password?
+          </a>
+        </p>
       </form>
 
       <!-- ── REGISTER FORM (hidden by default) ── -->
@@ -64,11 +72,24 @@
 
         <div class="form-group">
           <label for="reg-role">I am a…</label>
-          <select id="reg-role" onchange="toggleChildFields()" required>
+          <select id="reg-role" onchange="toggleRoleFields()" required>
             <option value="">— Select role —</option>
             <option value="parent">Parent / Guardian</option>
             <option value="teacher">Teacher / Tutor</option>
           </select>
+        </div>
+
+        <!-- Teacher-only: invite code -->
+        <div id="teacher-fields" style="display:none;">
+          <div class="form-group">
+            <label for="reg-teacher-code">Teacher access code</label>
+            <input id="reg-teacher-code" type="text" placeholder="e.g. A3F9K2"
+              maxlength="6" autocomplete="off"
+              style="text-transform:uppercase;letter-spacing:4px;font-size:18px;font-weight:700;text-align:center;">
+            <small style="color:var(--text-muted);font-size:12px;margin-top:4px;display:block;">
+              6-character code — contact SCG Tuitions to get yours
+            </small>
+          </div>
         </div>
 
         <!-- Parent-only fields -->
@@ -117,9 +138,10 @@
       clearAlert('auth-alert');
     }
 
-    function toggleChildFields() {
+    function toggleRoleFields() {
       const role = document.getElementById('reg-role').value;
-      document.getElementById('parent-fields').style.display = role === 'parent' ? 'block' : 'none';
+      document.getElementById('parent-fields').style.display  = role === 'parent'  ? 'block' : 'none';
+      document.getElementById('teacher-fields').style.display = role === 'teacher' ? 'block' : 'none';
     }
 
     function clearAlert(id) {
@@ -141,9 +163,9 @@
         const snap = await db.collection('users').doc(user.uid).get();
         if (snap.exists) {
           const role = snap.data().role;
-          window.location.href = role === 'teacher'
-            ? 'teacher-dashboard.html'
-            : 'parent-dashboard.html';
+          window.location.href = role === 'admin'   ? 'admin.html'
+                               : role === 'teacher' ? 'teacher-chat.html'
+                               : 'parent-chat.html';
         }
       } catch {}
     });
@@ -188,6 +210,37 @@
       btn.disabled = true;
       btn.textContent = 'Creating account…';
 
+      // ── Validate teacher invite code before creating account ──────────────────
+      let inviteDocId = null;
+      if (role === 'teacher') {
+        const code = (document.getElementById('reg-teacher-code').value || '').trim().toUpperCase();
+        if (!code || code.length !== 6) {
+          showAlert('error', 'Please enter the 6-character teacher access code.');
+          btn.disabled = false;
+          btn.textContent = 'Create Account';
+          return;
+        }
+        try {
+          const snap = await db.collection('teacherInvites')
+            .where('code', '==', code)
+            .where('used', '==', false)
+            .limit(1)
+            .get();
+          if (snap.empty) {
+            showAlert('error', 'Invalid or already used access code. Contact SCG Tuitions for a new one.');
+            btn.disabled = false;
+            btn.textContent = 'Create Account';
+            return;
+          }
+          inviteDocId = snap.docs[0].id;
+        } catch (err) {
+          showAlert('error', 'Could not verify access code. Please try again.');
+          btn.disabled = false;
+          btn.textContent = 'Create Account';
+          return;
+        }
+      }
+
       try {
         const cred = await auth.createUserWithEmailAndPassword(email, pass);
 
@@ -204,11 +257,36 @@
         }
 
         await db.collection('users').doc(cred.user.uid).set(profile);
+
+        // Mark invite code as used
+        if (inviteDocId) {
+          await db.collection('teacherInvites').doc(inviteDocId).update({
+            used:    true,
+            usedBy:  cred.user.uid,
+            usedAt:  firebase.firestore.FieldValue.serverTimestamp(),
+          });
+        }
         // onAuthStateChanged handles redirect
       } catch (err) {
         showAlert('error', friendlyAuthError(err.code));
         btn.disabled = false;
         btn.textContent = 'Create Account';
+      }
+    }
+
+    // ── Forgot password ───────────────────────────────────────────────────────
+    async function handleForgotPassword(e) {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value.trim();
+      if (!email) {
+        showAlert('error', 'Enter your email address above first, then click Forgot password.');
+        return;
+      }
+      try {
+        await auth.sendPasswordResetEmail(email);
+        showAlert('success', `Password reset email sent to ${email}. Check your inbox.`);
+      } catch (err) {
+        showAlert('error', friendlyAuthError(err.code));
       }
     }
 

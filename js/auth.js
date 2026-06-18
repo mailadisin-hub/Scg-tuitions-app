@@ -1,5 +1,12 @@
 // ─── Shared Auth Utilities ───────────────────────────────────────────────────
 
+// Shared utility
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // Redirect if not logged in; return current user profile from Firestore
 async function requireAuth(expectedRole) {
   return new Promise((resolve, reject) => {
@@ -18,10 +25,9 @@ async function requireAuth(expectedRole) {
         }
         const profile = { uid: user.uid, ...snap.data() };
         if (expectedRole && profile.role !== expectedRole) {
-          // Redirect to correct dashboard
-          window.location.href = profile.role === 'teacher'
-            ? 'teacher-dashboard.html'
-            : 'parent-dashboard.html';
+          if (profile.role === 'admin')        window.location.href = 'admin.html';
+          else if (profile.role === 'teacher') window.location.href = 'teacher-chat.html';
+          else                                 window.location.href = 'parent-chat.html';
           return reject('wrong-role');
         }
         resolve(profile);
@@ -44,10 +50,10 @@ function renderHeaderUser(profile) {
     .slice(0, 2)
     .toUpperCase();
 
-  const roleClass = profile.role === 'teacher' ? 'teacher' : 'parent';
+  const roleClass = ['teacher','admin'].includes(profile.role) ? profile.role : 'parent';
   badge.innerHTML = `
     <div class="user-avatar">${initials}</div>
-    <span>${profile.displayName}</span>
+    <span class="user-name">${profile.displayName}</span>
     <span class="role-pill ${roleClass}">${profile.role}</span>`;
 }
 
@@ -85,4 +91,39 @@ function setAlert(elId, type, msg) {
 function clearAlert(elId) {
   const el = document.getElementById(elId);
   if (el) el.style.display = 'none';
+}
+
+// Format a date for display (short)
+function formatDate(ts) {
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// Load parents — pass teacherId to filter to assigned students only (teacher pages)
+// Pass null to get all parents (admin pages)
+async function loadParentsList(teacherId = null) {
+  let query = db.collection('users').where('role', '==', 'parent');
+  if (teacherId) query = query.where('teacherId', '==', teacherId);
+  query = query.orderBy('displayName');
+  const snap = await query.get();
+  return snap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+}
+
+// Populate a <select> element with parents list
+function populateParentSelect(selectId, parents) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Select a student —</option>';
+  parents.forEach(p => {
+    const label = p.childName
+      ? `${p.displayName} — ${p.childName}${p.childYear ? ', ' + p.childYear : ''}`
+      : p.displayName;
+    sel.innerHTML += `<option value="${p.uid}">${escHtml(label)}</option>`;
+  });
+}
+
+// Get initials from a display name
+function getInitials(name) {
+  return (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 }
