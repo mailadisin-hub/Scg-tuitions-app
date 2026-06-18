@@ -39,6 +39,12 @@
           <input id="login-password" type="password" placeholder="••••••••" required autocomplete="current-password">
         </div>
         <button class="btn btn-primary" type="submit" id="login-btn">Sign In</button>
+        <p style="text-align:center;margin-top:14px;">
+          <a href="#" onclick="handleForgotPassword(event)"
+             style="font-size:13px;color:var(--primary);text-decoration:none;">
+            Forgot password?
+          </a>
+        </p>
       </form>
 
       <!-- ── REGISTER FORM (hidden by default) ── -->
@@ -265,6 +271,22 @@
         showAlert('error', friendlyAuthError(err.code));
         btn.disabled = false;
         btn.textContent = 'Create Account';
+      }
+    }
+
+    // ── Forgot password ───────────────────────────────────────────────────────
+    async function handleForgotPassword(e) {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value.trim();
+      if (!email) {
+        showAlert('error', 'Enter your email address above first, then click Forgot password.');
+        return;
+      }
+      try {
+        await auth.sendPasswordResetEmail(email);
+        showAlert('success', `Password reset email sent to ${email}. Check your inbox.`);
+      } catch (err) {
+        showAlert('error', friendlyAuthError(err.code));
       }
     }
 

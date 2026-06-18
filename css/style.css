@@ -538,3 +538,17 @@ body {
 @media (max-width: 480px) {
   .stats-row { grid-template-columns: 1fr; }
 }
+
+/* ── Version badge (bottom-right corner, all pages) ─────────────────────────── */
+body::after {
+  content: 'v1.2.0-beta';
+  position: fixed;
+  bottom: 8px;
+  right: 12px;
+  font-size: 11px;
+  font-family: monospace;
+  color: rgba(0,0,0,0.18);
+  pointer-events: none;
+  z-index: 9999;
+  letter-spacing: 0.5px;
+}
