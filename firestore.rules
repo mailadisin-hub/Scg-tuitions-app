@@ -56,12 +56,12 @@ service cloud.firestore {
       allow delete: if isTeacher() && resource.data.teacherId == uid();
     }
 
-    // ── Payments ─────────────────────────────────────────────────────────────
+    // ── Payments (admin-managed) ──────────────────────────────────────────────
     match /payments/{docId} {
-      allow create:  if isTeacher();
-      allow update:  if isTeacher() && resource.data.teacherId == uid();
+      allow create:  if isAdmin();
+      allow update:  if isAdmin();
       allow read:    if isAuthed()
-        && (resource.data.parentId == uid() || resource.data.teacherId == uid());
+        && (resource.data.parentId == uid() || isAdmin());
       allow delete:  if false;
     }
 
@@ -83,10 +83,10 @@ service cloud.firestore {
         && (resource.data.parentId == uid() || isTeacher());
     }
 
-    // ── Settings (global config, written by teacher/admin) ───────────────────
+    // ── Settings (re-registration window — admin only) ────────────────────────
     match /settings/{docId} {
       allow read:  if isAuthed();
-      allow write: if isTeacher();
+      allow write: if isAdmin();
     }
 
     // ── Teacher invite codes (admin-only management) ──────────────────────────
