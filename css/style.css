@@ -534,9 +534,57 @@ body {
   .stats-row      { grid-template-columns: repeat(2, 1fr); }
   .notif-prompt   { flex-direction: column; align-items: flex-start; }
   .rereg-open-banner { flex-direction: column; align-items: flex-start; }
+  .admin-grid     { grid-template-columns: 1fr; }
 }
-@media (max-width: 480px) {
+
+/* ── Mobile (phones) ─────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  /* Shrink header */
+  .app-header { height: 52px; padding: 0 14px; }
+  .logo-icon  { width: 32px; height: 32px; font-size: 11px; border-radius: 8px; }
+  .logo-name  { font-size: 14px; }
+  .logo-tagline { display: none; }
+
+  /* Header right: hide full name, keep avatar + role only */
+  .user-name  { display: none; }
+  .user-badge { padding: 4px 8px; gap: 6px; font-size: 13px; }
+  .user-avatar { width: 26px; height: 26px; font-size: 11px; }
+  .btn-logout { padding: 5px 10px; font-size: 12px; }
+  .header-right { gap: 8px; }
+
+  /* Nav sticks under the shorter header */
+  .portal-nav { top: 52px; }
+  .portal-nav-link { padding: 11px 12px; font-size: 12px; }
+
+  /* Login page tighter on small phones */
+  .login-card { padding: 28px 18px; border-radius: 14px; }
+  .login-logo-icon { width: 56px; height: 56px; font-size: 20px; }
+  .login-title { font-size: 22px; }
+
+  /* Cards */
+  .card { border-radius: 10px; }
+  .card-header { padding: 14px 16px; }
+  .card-body   { padding: 14px 16px; }
+
+  /* Stats row 1 col on small phones */
+  .stats-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .stat-card  { padding: 14px; }
+  .stat-icon  { width: 36px; height: 36px; font-size: 18px; }
+
+  /* Tables scroll horizontally */
+  .hw-table { font-size: 13px; }
+  table { display: block; overflow-x: auto; }
+
+  /* Chat layout */
+  .chat-layout { height: calc(100vh - 52px - 40px); }
+
+  /* Version badge above phone nav bar */
+  body::after { bottom: 72px; }
+}
+
+@media (max-width: 380px) {
   .stats-row { grid-template-columns: 1fr; }
+  .role-pill { display: none; }
 }
 
 /* ── Version badge (bottom-right corner, all pages) ─────────────────────────── */

@@ -53,7 +53,7 @@ function renderHeaderUser(profile) {
   const roleClass = ['teacher','admin'].includes(profile.role) ? profile.role : 'parent';
   badge.innerHTML = `
     <div class="user-avatar">${initials}</div>
-    <span>${profile.displayName}</span>
+    <span class="user-name">${profile.displayName}</span>
     <span class="role-pill ${roleClass}">${profile.role}</span>`;
 }
 
