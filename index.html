@@ -157,9 +157,9 @@
         const snap = await db.collection('users').doc(user.uid).get();
         if (snap.exists) {
           const role = snap.data().role;
-          window.location.href = role === 'teacher'
-            ? 'teacher-chat.html'
-            : 'parent-chat.html';
+          window.location.href = role === 'admin'   ? 'admin.html'
+                               : role === 'teacher' ? 'teacher-chat.html'
+                               : 'parent-chat.html';
         }
       } catch {}
     });

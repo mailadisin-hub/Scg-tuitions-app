@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCG Tuitions — Admin</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <meta name="theme-color" content="#141d57">
+  <style>
+    .admin-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    @media(max-width:768px){ .admin-grid{ grid-template-columns:1fr; } }
+    .code-pill {
+      font-family:monospace; font-size:22px; font-weight:800;
+      letter-spacing:6px; color:var(--primary);
+      background:var(--bg); border:2px dashed var(--accent);
+      border-radius:10px; padding:14px 24px; display:inline-block;
+      margin:8px 0;
+    }
+    .new-code-box {
+      background:#f0fff4; border:2px solid var(--accent);
+      border-radius:12px; padding:20px; text-align:center; margin-bottom:20px;
+      display:none;
+    }
+    .user-row { display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid var(--border); }
+    .user-row:last-child { border-bottom:none; }
+    .user-initials { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:#fff; flex-shrink:0; }
+    .user-initials.teacher { background:var(--primary); }
+    .user-initials.parent  { background:var(--accent); }
+    .user-initials.admin   { background:#7c3aed; }
+  </style>
+</head>
+<body>
+
+  <header class="app-header">
+    <a class="logo" href="#">
+      <div class="logo-icon">SCG</div>
+      <div class="logo-text">
+        <span class="logo-name">SCG Tuitions</span>
+        <span class="logo-tagline">Admin Portal</span>
+      </div>
+    </a>
+    <div class="header-right">
+      <div class="user-badge" id="user-badge">…</div>
+      <button class="btn-logout" onclick="signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <div class="page-wrapper-wide" id="main-content" style="display:none;">
+
+    <!-- Stats row -->
+    <div class="stats-row" style="margin-bottom:28px;">
+      <div class="stat-card">
+        <div class="stat-icon blue">👩‍🏫</div>
+        <div class="stat-info"><p>Teachers</p><h3 id="stat-teachers">—</h3></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon green">👨‍👩‍👧</div>
+        <div class="stat-info"><p>Parents</p><h3 id="stat-parents">—</h3></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon orange">🔑</div>
+        <div class="stat-info"><p>Active codes</p><h3 id="stat-codes">—</h3></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon blue">✅</div>
+        <div class="stat-info"><p>Codes used</p><h3 id="stat-used">—</h3></div>
+      </div>
+    </div>
+
+    <div class="admin-grid">
+
+      <!-- LEFT: Invite code manager -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">🔑 Teacher Invite Codes</span>
+            <button class="btn btn-blue btn-sm" onclick="generateCode()">+ Generate Code</button>
+          </div>
+          <div class="card-body">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
+              Generate a one-time code and send it to a new teacher via text or WhatsApp. Each code can only be used once.
+            </p>
+
+            <!-- New code display -->
+            <div id="new-code-box" class="new-code-box">
+              <p style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Send this code to the new teacher:</p>
+              <div id="new-code-value" class="code-pill"></div>
+              <p style="font-size:12px;color:var(--text-muted);margin-top:6px;">Single use · expires only when used</p>
+              <button class="btn btn-secondary btn-sm" style="margin-top:12px;" onclick="copyCode()">📋 Copy code</button>
+            </div>
+
+            <!-- Code list -->
+            <div id="codes-list">
+              <div class="loader"><div class="spinner"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Registered users -->
+      <div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">👥 Registered Users</span>
+          </div>
+          <div id="users-list">
+            <div class="loader"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/auth.js"></script>
+
+  <script>
+    let currentUser = null;
+    let latestCode  = '';
+
+    (async () => {
+      try {
+        currentUser = await requireAuth('admin');
+        renderHeaderUser(currentUser);
+        document.getElementById('main-content').style.display = 'block';
+        loadStats();
+        loadCodes();
+        loadUsers();
+      } catch {}
+    })();
+
+    // ── Stats ─────────────────────────────────────────────────────────────────
+    async function loadStats() {
+      const [usersSnap, codesSnap] = await Promise.all([
+        db.collection('users').get(),
+        db.collection('teacherInvites').get(),
+      ]);
+
+      let teachers = 0, parents = 0;
+      usersSnap.forEach(d => {
+        if (d.data().role === 'teacher') teachers++;
+        if (d.data().role === 'parent')  parents++;
+      });
+
+      let active = 0, used = 0;
+      codesSnap.forEach(d => { d.data().used ? used++ : active++; });
+
+      document.getElementById('stat-teachers').textContent = teachers;
+      document.getElementById('stat-parents').textContent  = parents;
+      document.getElementById('stat-codes').textContent    = active;
+      document.getElementById('stat-used').textContent     = used;
+    }
+
+    // ── Generate code ─────────────────────────────────────────────────────────
+    function generateCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = '';
+      for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+
+      db.collection('teacherInvites').add({
+        code,
+        used:      false,
+        createdBy: currentUser.uid,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      }).then(() => {
+        latestCode = code;
+        document.getElementById('new-code-value').textContent = code;
+        document.getElementById('new-code-box').style.display = 'block';
+        loadCodes();
+        loadStats();
+        showToast('Code generated', `Share "${code}" with the new teacher.`, '🔑');
+      }).catch(() => showToast('Error', 'Could not generate code.', '❌'));
+    }
+
+    function copyCode() {
+      navigator.clipboard.writeText(latestCode)
+        .then(() => showToast('Copied', `Code "${latestCode}" copied to clipboard.`, '📋'))
+        .catch(() => showToast('', `Code: ${latestCode}`, '📋'));
+    }
+
+    // ── Load codes ────────────────────────────────────────────────────────────
+    function loadCodes() {
+      db.collection('teacherInvites')
+        .orderBy('createdAt', 'desc')
+        .get()
+        .then(snap => {
+          const el = document.getElementById('codes-list');
+          if (snap.empty) {
+            el.innerHTML = '<p style="font-size:13px;color:var(--text-muted);padding:4px 0;">No codes yet. Click "+ Generate Code" to create one.</p>';
+            return;
+          }
+          el.innerHTML = `
+            <table class="hw-table">
+              <thead>
+                <tr><th>Code</th><th>Status</th><th>Created</th><th></th></tr>
+              </thead>
+              <tbody>
+                ${snap.docs.map(doc => {
+                  const d = doc.data();
+                  const badge = d.used
+                    ? '<span class="badge badge-danger">Used</span>'
+                    : '<span class="badge badge-success">Available</span>';
+                  const del = !d.used
+                    ? `<button class="btn btn-danger btn-sm" onclick="deleteCode('${doc.id}')">Delete</button>`
+                    : '';
+                  return `<tr>
+                    <td><span style="font-family:monospace;font-size:16px;font-weight:800;letter-spacing:3px;">${escHtml(d.code)}</span></td>
+                    <td>${badge}</td>
+                    <td style="font-size:12px;color:var(--text-muted);">${d.createdAt ? formatDate(d.createdAt) : '—'}</td>
+                    <td>${del}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>`;
+        });
+    }
+
+    function deleteCode(id) {
+      if (!confirm('Delete this unused code? It will no longer work for registration.')) return;
+      db.collection('teacherInvites').doc(id).delete()
+        .then(() => { loadCodes(); loadStats(); showToast('Deleted', 'Code removed.', '🗑️'); })
+        .catch(() => showToast('Error', 'Could not delete code.', '❌'));
+    }
+
+    // ── Load users ────────────────────────────────────────────────────────────
+    function loadUsers() {
+      db.collection('users').orderBy('displayName').get().then(snap => {
+        const el = document.getElementById('users-list');
+        if (snap.empty) {
+          el.innerHTML = '<p style="padding:24px;font-size:13px;color:var(--text-muted);">No users registered yet.</p>';
+          return;
+        }
+        el.innerHTML = snap.docs.map(doc => {
+          const d = doc.data();
+          const initials = getInitials(d.displayName);
+          const roleClass = d.role || 'parent';
+          const rolePill = `<span class="role-pill ${roleClass}">${d.role}</span>`;
+          const sub = d.childName ? `Child: ${escHtml(d.childName)}` : escHtml(d.email || '');
+          return `<div class="user-row">
+            <div class="user-initials ${roleClass}">${escHtml(initials)}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:14px;font-weight:600;color:var(--text);">${escHtml(d.displayName)}</div>
+              <div style="font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sub}</div>
+            </div>
+            ${rolePill}
+          </div>`;
+        }).join('');
+      });
+    }
+
+    // ── Toast ─────────────────────────────────────────────────────────────────
+    function showToast(title, msg, icon = 'ℹ️') {
+      const c = document.getElementById('toast-container');
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.innerHTML = `<span class="toast-icon">${icon}</span><div class="toast-body"><strong>${escHtml(title)}</strong><small>${escHtml(msg)}</small></div>`;
+      c.appendChild(t);
+      setTimeout(() => { t.classList.add('fade-out'); setTimeout(() => t.remove(), 300); }, 4000);
+    }
+  </script>
+</body>
+</html>

@@ -6,6 +6,8 @@ service cloud.firestore {
     function uid()       { return request.auth.uid; }
     function userRole()  { return get(/databases/$(database)/documents/users/$(uid())).data.role; }
     function isTeacher() { return isAuthed() && userRole() == 'teacher'; }
+    function isAdmin()   { return isAuthed() && userRole() == 'admin'; }
+    function isStaff()   { return isTeacher() || isAdmin(); }
 
     // ── Users ────────────────────────────────────────────────────────────────
     match /users/{userId} {
@@ -86,13 +88,13 @@ service cloud.firestore {
       allow write: if isTeacher();
     }
 
-    // ── Teacher invite codes ──────────────────────────────────────────────────
-    // Public read needed so the code can be validated before the account exists
+    // ── Teacher invite codes (admin-only management) ──────────────────────────
+    // Public read so codes can be validated during registration (before auth exists)
     match /teacherInvites/{inviteId} {
       allow read:   if true;
-      allow create: if isTeacher();
+      allow create: if isAdmin();
       allow update: if true;   // mark as used during registration (no auth yet)
-      allow delete: if isTeacher();
+      allow delete: if isAdmin();
     }
   }
 }

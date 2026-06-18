@@ -27,27 +27,6 @@
 
   <div class="page-wrapper-wide" id="main-content" style="display:none;">
 
-    <!-- SECTION 0: Teacher Invite Codes -->
-    <div class="card" style="margin-bottom:24px;">
-      <div class="card-header">
-        <span class="card-title">🔑 Teacher Invite Codes</span>
-        <button class="btn btn-blue btn-sm" onclick="generateCode()">+ Generate New Code</button>
-      </div>
-      <div class="card-body">
-        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
-          Generate a one-time code and share it with a new teacher. Each code can only be used once to register.
-        </p>
-        <div id="new-code-display" style="display:none;background:var(--bg);border:2px dashed var(--accent);border-radius:10px;padding:20px;text-align:center;margin-bottom:16px;">
-          <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Share this code with the new teacher:</p>
-          <div id="generated-code" style="font-size:36px;font-weight:800;letter-spacing:8px;color:var(--primary);font-family:monospace;"></div>
-          <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">Single use · Expires never</p>
-        </div>
-        <div id="codes-list">
-          <div class="loader"><div class="spinner"></div></div>
-        </div>
-      </div>
-    </div>
-
     <!-- SECTION 1: Settings -->
     <div class="card" style="margin-bottom:24px;">
       <div class="card-header">
@@ -163,7 +142,6 @@
         parentsList = await loadParentsList();
         document.getElementById('stat-total').textContent = parentsList.length;
 
-        loadCodes();
         loadSettings();
       } catch {}
     })();
@@ -315,67 +293,6 @@
       document.getElementById('stat-leave').textContent    = leaveCount;
       document.getElementById('stat-pending').textContent  = pendingCount;
       document.getElementById('stat-total').textContent    = parents.length;
-    }
-
-    // ── Teacher invite codes ──────────────────────────────────────────────────
-    function generateCode() {
-      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      let code = '';
-      for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
-
-      db.collection('teacherInvites').add({
-        code,
-        used:      false,
-        createdBy: currentUser.uid,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      }).then(() => {
-        document.getElementById('generated-code').textContent = code;
-        document.getElementById('new-code-display').style.display = 'block';
-        loadCodes();
-        showToast('Code generated', `Share "${code}" with the new teacher.`, '🔑');
-      }).catch(err => {
-        showToast('Error', 'Could not generate code.', '❌');
-        console.error(err);
-      });
-    }
-
-    function loadCodes() {
-      db.collection('teacherInvites')
-        .where('createdBy', '==', currentUser.uid)
-        .orderBy('createdAt', 'desc')
-        .get()
-        .then(snap => {
-          const el = document.getElementById('codes-list');
-          if (snap.empty) {
-            el.innerHTML = '<p style="font-size:13px;color:var(--text-muted);">No codes generated yet. Click "+ Generate New Code" to create one.</p>';
-            return;
-          }
-          el.innerHTML = `
-            <table class="hw-table">
-              <thead><tr><th>Code</th><th>Status</th><th>Created</th><th></th></tr></thead>
-              <tbody>
-                ${snap.docs.map(doc => {
-                  const d = doc.data();
-                  const status = d.used
-                    ? '<span class="badge badge-danger">Used</span>'
-                    : '<span class="badge badge-success">Available</span>';
-                  return `<tr>
-                    <td><span style="font-family:monospace;font-size:16px;font-weight:700;letter-spacing:3px;">${escHtml(d.code)}</span></td>
-                    <td>${status}</td>
-                    <td>${d.createdAt ? formatDate(d.createdAt) : '—'}</td>
-                    <td>${!d.used ? `<button class="btn btn-danger btn-sm" onclick="deleteCode('${doc.id}')">Delete</button>` : ''}</td>
-                  </tr>`;
-                }).join('')}
-              </tbody>
-            </table>`;
-        });
-    }
-
-    function deleteCode(id) {
-      if (!confirm('Delete this unused code?')) return;
-      db.collection('teacherInvites').doc(id).delete()
-        .then(() => { showToast('Deleted', 'Code removed.', '🗑️'); loadCodes(); })
-        .catch(() => showToast('Error', 'Could not delete code.', '❌'));
     }
 
     // ── Cleanup ───────────────────────────────────────────────────────────────

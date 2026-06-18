@@ -25,9 +25,9 @@ async function requireAuth(expectedRole) {
         }
         const profile = { uid: user.uid, ...snap.data() };
         if (expectedRole && profile.role !== expectedRole) {
-          window.location.href = profile.role === 'teacher'
-            ? 'teacher-chat.html'
-            : 'parent-chat.html';
+          if (profile.role === 'admin')        window.location.href = 'admin.html';
+          else if (profile.role === 'teacher') window.location.href = 'teacher-chat.html';
+          else                                 window.location.href = 'parent-chat.html';
           return reject('wrong-role');
         }
         resolve(profile);
@@ -50,7 +50,7 @@ function renderHeaderUser(profile) {
     .slice(0, 2)
     .toUpperCase();
 
-  const roleClass = profile.role === 'teacher' ? 'teacher' : 'parent';
+  const roleClass = ['teacher','admin'].includes(profile.role) ? profile.role : 'parent';
   badge.innerHTML = `
     <div class="user-avatar">${initials}</div>
     <span>${profile.displayName}</span>
