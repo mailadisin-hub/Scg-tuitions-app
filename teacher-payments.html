@@ -176,7 +176,7 @@
         renderPortalNav('payments', 'teacher');
         document.getElementById('main-content').style.display = 'block';
 
-        parentsList = await loadParentsList();
+        parentsList = await loadParentsList(currentUser.uid);
         populateParentSelect('pay-student', parentsList);
         populateFilterSelect();
         suggestInvoiceRef();

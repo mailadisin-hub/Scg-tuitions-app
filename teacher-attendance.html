@@ -129,7 +129,7 @@
         // Default date to today
         document.getElementById('att-date').value = todayISO();
 
-        parentsList = await loadParentsList();
+        parentsList = await loadParentsList(currentUser.uid);
         populateParentSelect('att-student', parentsList);
         populateFilterSelect();
         subscribeAttendance();

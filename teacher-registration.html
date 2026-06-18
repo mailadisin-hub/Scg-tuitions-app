@@ -139,7 +139,7 @@
         renderPortalNav('registration', 'teacher');
         document.getElementById('main-content').style.display = 'block';
 
-        parentsList = await loadParentsList();
+        parentsList = await loadParentsList(currentUser.uid);
         document.getElementById('stat-total').textContent = parentsList.length;
 
         loadSettings();

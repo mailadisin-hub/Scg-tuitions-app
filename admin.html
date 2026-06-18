@@ -68,6 +68,17 @@
       </div>
     </div>
 
+    <!-- Student assignment (full width) -->
+    <div class="card" style="margin-bottom:24px;">
+      <div class="card-header">
+        <span class="card-title">🎓 Student — Teacher Assignments</span>
+        <span style="font-size:12px;color:var(--text-muted);">Assign or move students between teachers</span>
+      </div>
+      <div id="assignments-content">
+        <div class="loader"><div class="spinner"></div></div>
+      </div>
+    </div>
+
     <div class="admin-grid">
 
       <!-- LEFT: Invite code manager -->
@@ -122,8 +133,10 @@
   <script src="js/auth.js"></script>
 
   <script>
-    let currentUser = null;
-    let latestCode  = '';
+    let currentUser  = null;
+    let latestCode   = '';
+    let allTeachers  = [];
+    let allStudents  = [];
 
     (async () => {
       try {
@@ -132,7 +145,7 @@
         document.getElementById('main-content').style.display = 'block';
         loadStats();
         loadCodes();
-        loadUsers();
+        loadUsersAndAssignments();
       } catch {}
     })();
 
@@ -229,30 +242,111 @@
         .catch(() => showToast('Error', 'Could not delete code.', '❌'));
     }
 
-    // ── Load users ────────────────────────────────────────────────────────────
-    function loadUsers() {
-      db.collection('users').orderBy('displayName').get().then(snap => {
-        const el = document.getElementById('users-list');
-        if (snap.empty) {
-          el.innerHTML = '<p style="padding:24px;font-size:13px;color:var(--text-muted);">No users registered yet.</p>';
-          return;
-        }
-        el.innerHTML = snap.docs.map(doc => {
-          const d = doc.data();
-          const initials = getInitials(d.displayName);
-          const roleClass = d.role || 'parent';
-          const rolePill = `<span class="role-pill ${roleClass}">${d.role}</span>`;
-          const sub = d.childName ? `Child: ${escHtml(d.childName)}` : escHtml(d.email || '');
-          return `<div class="user-row">
-            <div class="user-initials ${roleClass}">${escHtml(initials)}</div>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:14px;font-weight:600;color:var(--text);">${escHtml(d.displayName)}</div>
-              <div style="font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sub}</div>
-            </div>
-            ${rolePill}
-          </div>`;
-        }).join('');
+    // ── Load users + assignments ───────────────────────────────────────────────
+    async function loadUsersAndAssignments() {
+      const snap = await db.collection('users').orderBy('displayName').get();
+      const all  = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+
+      allTeachers = all.filter(u => u.role === 'teacher' || u.role === 'admin');
+      allStudents = all.filter(u => u.role === 'parent');
+
+      renderAssignments();
+      renderUsersList(all);
+    }
+
+    function renderAssignments() {
+      const el = document.getElementById('assignments-content');
+      if (!allStudents.length) {
+        el.innerHTML = '<p style="padding:20px;font-size:13px;color:var(--text-muted);">No students registered yet. Students will appear here once they create an account.</p>';
+        return;
+      }
+
+      const teacherOptions = allTeachers.map(t =>
+        `<option value="${t.uid}">${escHtml(t.displayName)}</option>`
+      ).join('');
+
+      el.innerHTML = `
+        <div style="overflow-x:auto;">
+          <table class="hw-table">
+            <thead>
+              <tr>
+                <th>Student (Child)</th>
+                <th>Parent name</th>
+                <th>Year</th>
+                <th>Assigned teacher</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${allStudents.map(s => {
+                const teacher = allTeachers.find(t => t.uid === s.teacherId);
+                const assignedLabel = teacher ? escHtml(teacher.displayName) : '<span style="color:var(--danger);font-weight:600;">Unassigned</span>';
+                const options = `<option value="">— Select teacher —</option>${teacherOptions}`;
+                return `<tr>
+                  <td>
+                    <div style="font-weight:600;color:var(--text);">${escHtml(s.childName || '—')}</div>
+                  </td>
+                  <td style="color:var(--text-muted);font-size:13px;">${escHtml(s.displayName)}</td>
+                  <td style="color:var(--text-muted);font-size:13px;">${escHtml(s.childYear || '—')}</td>
+                  <td>${assignedLabel}</td>
+                  <td>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                      <select id="sel-${s.uid}" style="font-size:13px;padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;background:#fff;">
+                        ${options}
+                      </select>
+                      <button class="btn btn-blue btn-sm" onclick="assignStudent('${s.uid}', '${escHtml(s.childName || s.displayName)}')">
+                        ${s.teacherId ? 'Move' : 'Assign'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`;
+
+      // Pre-select current teacher in each dropdown
+      allStudents.forEach(s => {
+        const sel = document.getElementById(`sel-${s.uid}`);
+        if (sel && s.teacherId) sel.value = s.teacherId;
       });
+    }
+
+    async function assignStudent(studentUid, studentName) {
+      const sel = document.getElementById(`sel-${studentUid}`);
+      const teacherId = sel ? sel.value : '';
+      if (!teacherId) { showToast('Select a teacher', 'Please choose a teacher first.', '⚠️'); return; }
+
+      const teacher = allTeachers.find(t => t.uid === teacherId);
+      try {
+        await db.collection('users').doc(studentUid).update({ teacherId });
+        showToast('Assigned', `${studentName} → ${teacher ? teacher.displayName : 'teacher'}`, '✅');
+        loadUsersAndAssignments();
+        loadStats();
+      } catch (err) {
+        showToast('Error', 'Could not assign student.', '❌');
+        console.error(err);
+      }
+    }
+
+    function renderUsersList(all) {
+      const el = document.getElementById('users-list');
+      if (!all.length) {
+        el.innerHTML = '<p style="padding:24px;font-size:13px;color:var(--text-muted);">No users registered yet.</p>';
+        return;
+      }
+      el.innerHTML = all.map(d => {
+        const roleClass = d.role || 'parent';
+        const sub = d.childName ? `Child: ${escHtml(d.childName)}` : escHtml(d.email || '');
+        return `<div class="user-row">
+          <div class="user-initials ${roleClass}">${escHtml(getInitials(d.displayName))}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:600;color:var(--text);">${escHtml(d.displayName)}</div>
+            <div style="font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sub}</div>
+          </div>
+          <span class="role-pill ${roleClass}">${d.role}</span>
+        </div>`;
+      }).join('');
     }
 
     // ── Toast ─────────────────────────────────────────────────────────────────

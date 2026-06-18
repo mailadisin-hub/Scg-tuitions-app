@@ -100,9 +100,13 @@ function formatDate(ts) {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-// Load all registered parents — used by every teacher page with a student selector
-async function loadParentsList() {
-  const snap = await db.collection('users').where('role', '==', 'parent').orderBy('displayName').get();
+// Load parents — pass teacherId to filter to assigned students only (teacher pages)
+// Pass null to get all parents (admin pages)
+async function loadParentsList(teacherId = null) {
+  let query = db.collection('users').where('role', '==', 'parent');
+  if (teacherId) query = query.where('teacherId', '==', teacherId);
+  query = query.orderBy('displayName');
+  const snap = await query.get();
   return snap.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
 }
 

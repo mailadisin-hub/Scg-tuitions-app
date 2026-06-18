@@ -156,7 +156,7 @@
 
         document.getElementById('hw-date').value = todayISO();
 
-        parentsList = await loadParentsList();
+        parentsList = await loadParentsList(currentUser.uid);
         populateParentSelect('hw-student', parentsList);
         populateFilterSelect();
         subscribeHomework();

@@ -11,8 +11,9 @@ service cloud.firestore {
 
     // ── Users ────────────────────────────────────────────────────────────────
     match /users/{userId} {
-      allow read:  if isAuthed();
-      allow write: if uid() == userId;
+      allow read:   if isAuthed();
+      allow write:  if uid() == userId;
+      allow update: if isAdmin();   // admin can assign/reassign teacherId
     }
 
     // ── Conversations (two-way chat) ─────────────────────────────────────────

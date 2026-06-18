@@ -144,7 +144,7 @@
 
         document.getElementById('assess-date').value = todayISO();
 
-        parentsList = await loadParentsList();
+        parentsList = await loadParentsList(currentUser.uid);
         populateParentSelect('assess-student', parentsList);
         populateFilterSelect();
         subscribeAssessments();

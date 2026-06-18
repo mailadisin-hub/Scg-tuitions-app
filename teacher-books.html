@@ -138,7 +138,7 @@
         // Default academic year
         document.getElementById('books-year').value = currentAcademicYear();
 
-        parentsList = await loadParentsList();
+        parentsList = await loadParentsList(currentUser.uid);
         populateParentSelect('books-student', parentsList);
         populateFilterSelect();
         subscribeBooks();

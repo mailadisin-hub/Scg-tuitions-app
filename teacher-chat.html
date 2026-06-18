@@ -276,7 +276,7 @@
   async function showNewConvoModal() {
     document.getElementById('new-convo-modal').classList.add('open');
     if (!parentsList.length) {
-      parentsList = await loadParentsList();
+      parentsList = await loadParentsList(currentUser.uid);
       populateParentSelect('new-convo-parent', parentsList);
     }
   }
