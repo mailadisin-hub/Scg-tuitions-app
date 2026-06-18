@@ -548,8 +548,8 @@ body::after {
   font-size: 12px;
   font-family: monospace;
   font-weight: 600;
-  color: #fff;
-  background: rgba(0,0,0,0.45);
+  color: #000;
+  background: #fff;
   padding: 3px 8px;
   border-radius: 20px;
   pointer-events: none;
