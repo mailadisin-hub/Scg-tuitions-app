@@ -701,7 +701,7 @@ body {
 
 /* ── Version badge (bottom-right corner, all pages) ─────────────────────────── */
 body::after {
-  content: 'v1.2.7-beta';
+  content: 'v1.3.0-beta';
   position: fixed;
   bottom: 10px;
   right: 14px;
